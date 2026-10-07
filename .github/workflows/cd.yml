@@ -1,0 +1,113 @@
+name: CD # Continuous Deployment
+
+on:
+  push:
+    tags:
+      - '[v]?[0-9]+.[0-9]+.[0-9]+'
+
+# The binary published here is the `tachy` crate. Rename BINARY_NAME (and the
+# crate) together when you adopt this template.
+env:
+  BINARY_NAME: tachy
+
+jobs:
+  publish:
+    name: Publishing for ${{ matrix.os-name }}-${{ matrix.architecture }}
+    runs-on: ${{ matrix.os }}
+    permissions:
+      contents: write
+
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - os: macos-latest
+            os-name: macos
+            target: x86_64-apple-darwin
+            architecture: x86_64
+            binary-postfix: ""
+            use-cross: false
+          - os: macos-latest
+            os-name: macos
+            target: aarch64-apple-darwin
+            architecture: arm64
+            binary-postfix: ""
+            use-cross: false
+          - os: ubuntu-latest
+            os-name: linux
+            target: x86_64-unknown-linux-gnu
+            architecture: x86_64
+            binary-postfix: ""
+            use-cross: false
+          - os: windows-latest
+            os-name: windows
+            target: x86_64-pc-windows-msvc
+            architecture: x86_64
+            binary-postfix: ".exe"
+            use-cross: false
+          - os: ubuntu-latest
+            os-name: linux
+            target: aarch64-unknown-linux-gnu
+            architecture: arm64
+            binary-postfix: ""
+            use-cross: true
+          - os: ubuntu-latest
+            os-name: linux
+            target: i686-unknown-linux-gnu
+            architecture: i686
+            binary-postfix: ""
+            use-cross: true
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          # vergen reads the git history to stamp the version string.
+          fetch-depth: 0
+
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+        with:
+          targets: ${{ matrix.target }}
+
+      - uses: Swatinem/rust-cache@v2
+        with:
+          key: ${{ matrix.target }}
+
+      - name: Install cross
+        if: matrix.use-cross
+        uses: taiki-e/install-action@v2
+        with:
+          tool: cross
+
+      - name: Build
+        shell: bash
+        run: |
+          if [[ "${{ matrix.use-cross }}" == "true" ]]; then
+            cross build --locked --release --package "$BINARY_NAME" --target ${{ matrix.target }}
+          else
+            cargo build --locked --release --package "$BINARY_NAME" --target ${{ matrix.target }}
+          fi
+
+      - name: Package
+        shell: bash
+        run: |
+          cd target/${{ matrix.target }}/release
+
+          BINARY="${BINARY_NAME}${{ matrix.binary-postfix }}"
+          RELEASE_NAME="${BINARY_NAME}-${GITHUB_REF#refs/tags/}-${{ matrix.os-name }}-${{ matrix.architecture }}"
+
+          tar czvf "$RELEASE_NAME.tar.gz" "$BINARY"
+
+          if [[ "${{ runner.os }}" == "Windows" ]]; then
+            certutil -hashfile "$RELEASE_NAME.tar.gz" sha256 | grep -E '[A-Fa-f0-9]{64}' > "$RELEASE_NAME.sha256"
+          else
+            shasum -a 256 "$RELEASE_NAME.tar.gz" > "$RELEASE_NAME.sha256"
+          fi
+
+      - name: Release assets
+        uses: softprops/action-gh-release@v2
+        with:
+          files: |
+            target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}-*.tar.gz
+            target/${{ matrix.target }}/release/${{ env.BINARY_NAME }}-*.sha256

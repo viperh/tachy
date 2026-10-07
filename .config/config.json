@@ -1,0 +1,11 @@
+{
+  "keybindings": {
+    "Normal": {
+      "<Ctrl-q>": "Quit",
+      "<Ctrl-h>": "Help"
+    }
+  },
+  "styles": {
+    "Normal": {}
+  }
+}

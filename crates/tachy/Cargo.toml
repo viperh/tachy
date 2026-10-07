@@ -1,0 +1,47 @@
+[package]
+name = "tachy"
+description = "Blazingly fast text processor"
+version.workspace = true
+edition.workspace = true
+authors.workspace = true
+license.workspace = true
+repository.workspace = true
+rust-version.workspace = true
+build = "build.rs"
+
+# `errors.rs` reads CARGO_PKG_REPOSITORY at compile time for the panic message,
+# so `repository` above must stay set.
+
+[dependencies]
+tachy-core = { workspace = true }
+
+better-panic = { workspace = true }
+clap = { workspace = true }
+color-eyre = { workspace = true }
+config = { workspace = true }
+crossterm = { workspace = true }
+directories = { workspace = true }
+futures = { workspace = true }
+human-panic = { workspace = true }
+json5 = { workspace = true }
+libc = { workspace = true }
+ratatui = { workspace = true }
+serde = { workspace = true }
+strip-ansi-escapes = { workspace = true }
+strum = { workspace = true }
+tokio = { workspace = true }
+tokio-util = { workspace = true }
+tracing = { workspace = true }
+tracing-error = { workspace = true }
+tracing-subscriber = { workspace = true }
+
+# `Tui::suspend` raises SIGTSTP, which only exists on unix.
+[target.'cfg(not(windows))'.dependencies]
+signal-hook = { workspace = true }
+
+[build-dependencies]
+anyhow = { workspace = true }
+vergen-gix = { workspace = true }
+
+[dev-dependencies]
+pretty_assertions = { workspace = true }
