@@ -1,9 +1,9 @@
+use crate::theme::Theme;
 use ratatui::{
     prelude::*,
     widgets::{Block, Paragraph},
 };
 use tokio::sync::mpsc::UnboundedSender;
-use crate::theme::Theme;
 
 use super::Component;
 use crate::{action::Action, config::Config};
@@ -42,23 +42,6 @@ impl Component for Home {
     }
 
     fn draw(&mut self, frame: &mut Frame, area: Rect) -> color_eyre::Result<()> {
-        let [main, footer] =
-            Layout::vertical([Constraint::Fill(1), Constraint::Length(3)]).areas(area);
-
-        frame.render_widget(
-            Paragraph::new("TEST")
-                .block(Block::bordered().title("TEST AAA"))
-                .fg(Color::Rgb(0, 205, 205)),
-            main,
-        );
-
-        frame.render_widget(
-            Paragraph::new("Ctrl + q - Quit")
-                .block(Block::bordered())
-                .fg(Theme::rgb().),
-            footer,
-        );
-
         Ok(())
     }
 }
