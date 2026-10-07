@@ -1,0 +1,17 @@
+---
+source: crates/tachy/src/app/tests/dialogs.rs
+expression: text
+---
+ COLUMN
+ id · str · col 1/5
+ sampling…
+
+ TOP VALUES
+ sampling…
+
+ RECORD
+ id            1
+ name          user001
+ city          Lisbon
+ amount        37.07
+ note          ok

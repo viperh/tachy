@@ -1,0 +1,28 @@
+---
+source: crates/tachy/src/app/tests.rs
+expression: terminal.backend()
+---
+" tachy  1 t.csv                                         view: all rows   NORMAL "
+"    │ c0    │ c16    c17    c18    c19    c20    c21    c22    c23    c24       "
+"    │ str   │ str    str    str    str    str    str    str    str    str       "
+"  1 │ r0c0  │ r0c16  r0c17  r0c18  r0c19  r0c20  r0c21  r0c22  r0c23  r0c24     "
+"  2 │ r1c0  │ r1c16  r1c17  r1c18  r1c19  r1c20  r1c21  r1c22  r1c23  r1c24     "
+"  3 │ r2c0  │ r2c16  r2c17  r2c18  r2c19  r2c20  r2c21  r2c22  r2c23  r2c24     "
+"  4 │ r3c0  │ r3c16  r3c17  r3c18  r3c19  r3c20  r3c21  r3c22  r3c23  r3c24     "
+"  5 │ r4c0  │ r4c16  r4c17  r4c18  r4c19  r4c20  r4c21  r4c22  r4c23  r4c24     "
+"  6 │ r5c0  │ r5c16  r5c17  r5c18  r5c19  r5c20  r5c21  r5c22  r5c23  r5c24     "
+"  7 │ r6c0  │ r6c16  r6c17  r6c18  r6c19  r6c20  r6c21  r6c22  r6c23  r6c24     "
+"  8 │ r7c0  │ r7c16  r7c17  r7c18  r7c19  r7c20  r7c21  r7c22  r7c23  r7c24     "
+"  9 │ r8c0  │ r8c16  r8c17  r8c18  r8c19  r8c20  r8c21  r8c22  r8c23  r8c24     "
+" 10 │ r9c0  │ r9c16  r9c17  r9c18  r9c19  r9c20  r9c21  r9c22  r9c23  r9c24     "
+" 11 │ r10c0 │ r10c16 r10c17 r10c18 r10c19 r10c20 r10c21 r10c22 r10c23 r10c24    "
+" 12 │ r11c0 │ r11c16 r11c17 r11c18 r11c19 r11c20 r11c21 r11c22 r11c23 r11c24    "
+" 13 │ r12c0 │ r12c16 r12c17 r12c18 r12c19 r12c20 r12c21 r12c22 r12c23 r12c24    "
+" 14 │ r13c0 │ r13c16 r13c17 r13c18 r13c19 r13c20 r13c21 r13c22 r13c23 r13c24    "
+" 15 │ r14c0 │ r14c16 r14c17 r14c18 r14c19 r14c20 r14c21 r14c22 r14c23 r14c24    "
+" 16 │ r15c0 │ r15c16 r15c17 r15c18 r15c19 r15c20 r15c21 r15c22 r15c23 r15c24    "
+" 17 │ r16c0 │ r16c16 r16c17 r16c18 r16c19 r16c20 r16c21 r16c22 r16c23 r16c24    "
+" 18 │ r17c0 │ r17c16 r17c17 r17c18 r17c19 r17c20 r17c21 r17c22 r17c23 r17c24    "
+" 19 │ r18c0 │ r18c16 r18c17 r18c18 r18c19 r18c20 r18c21 r18c22 r18c23 r18c24    "
+" t.csv · 4.7 KB · 30 rows · mmap · index ready            R 1 / 30  C 25/25  0% "
+" / search  f filter  s sort  i inspect  : command  J jobs  q quit        ? help "

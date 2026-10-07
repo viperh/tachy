@@ -1,0 +1,28 @@
+---
+source: crates/tachy/src/components/help.rs
+expression: t.backend()
+---
+"┌ Help — tachy 0.1.0 ──────────────────────────────────────────────────────────┐"
+"│ Space            show or hide the column                                     │"
+"│ J shift-↓        move the column down                                        │"
+"│ K shift-↑        move the column up                                          │"
+"│ a                show every column                                           │"
+"│ /                filter the list by name                                     │"
+"│ Column chooser · filtering                                                   │"
+"│ Enter            keep the filter                                             │"
+"│ Esc              clear the filter                                            │"
+"│ ↑ ↓              move the selection                                          │"
+"│ other keys       edit the filter                                             │"
+"│                                                                              │"
+"│ Export dialog                                                                │"
+"│ Enter            export                                                      │"
+"│ Esc              close                                                       │"
+"│ Tab              complete the path                                           │"
+"│ ↓                select the next item                                        │"
+"│ ↑ shift-Tab      select the previous item                                    │"
+"│ query:  == != < <= > >=  ~ regex  contains starts ends                       │"
+"│ "x"i case-insensitive  in [..]  is [not] null  && || !  and or not           │"
+"│ `col name`  $1                                                               │"
+"│ goto:  g 50%  = the middle of the file by bytes while indexing,              │"
+"│ the middle row once indexed                                                  │"
+"└─ k/j scroll  PgUp/PgDn page  Home/G top/bottom  ?/Esc close  113–129 of 129 ─┘"

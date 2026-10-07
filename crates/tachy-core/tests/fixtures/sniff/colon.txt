@@ -1,0 +1,4 @@
+user:uid:gid:home
+root:0:0:/root
+daemon:1:1:/usr/sbin
+bin:2:2:/bin

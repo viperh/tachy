@@ -39,17 +39,23 @@ if you later add a second front end (a CLI, a daemon, a web UI).
 
 ## Running
 
-```sh
-cargo run -p tachy
-```
-
 `q`, `Ctrl-c` and `Ctrl-d` quit; `Ctrl-z` suspends. Rebind in
 `.config/config.json`.
 
 ```sh
-cargo run -p tachy -- --tick-rate 4 --frame-rate 60
+cargo run -p tachy -- data.csv     # open a file (use - for stdin)
+cargo run -p tachy -- --help       # every option (spec §3)
 cargo run -p tachy -- --version    # prints git info and the resolved directories
 ```
+
+## Limitations
+
+tachy memory-maps files read-only (spec §5.1, §16). If another program
+truncates an open file, reading past its new end raises `SIGBUS`. tachy
+catches it, restores the terminal, prints
+`tachy: <file> was truncated while open (SIGBUS); exiting` and exits with code 1.
+This is inherent to mmap. Other changes (appends, rewrites) are detected within
+about 2 s and shown as `file changed on disk — R to reload`.
 
 ## Configuration
 

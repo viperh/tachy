@@ -10,10 +10,62 @@ rust-version.workspace = true
 
 # Keep this crate UI-agnostic: no ratatui, no crossterm, no clap.
 # Everything here should be testable without a terminal.
+# (The one exception: `clap` for the `gen` test-data binary, optional and
+# only enabled by the `gen` feature, so the library never links it.)
 [dependencies]
+clap = { workspace = true, optional = true }
+csv-core = { workspace = true }
+encoding_rs = { workspace = true }
+memchr = { workspace = true }
+memmap2 = { workspace = true }
+regex = { workspace = true }
+roaring = { workspace = true }
 serde = { workspace = true }
+smallvec = { workspace = true }
+tempfile = { workspace = true }
 thiserror = { workspace = true }
+tokio = { workspace = true, features = ["rt", "sync", "time", "fs", "io-util", "macros"] }
+tokio-util = { workspace = true }
 tracing = { workspace = true }
+unicode-segmentation = { workspace = true }
+unicode-width = { workspace = true }
+
+# `statvfs` for the sort's free-space check (M5-03), Unix only.
+[target.'cfg(unix)'.dependencies]
+libc = { workspace = true }
+
+[features]
+# The test-data generator binary (M7-05):
+# `cargo run --release -p tachy-core --features gen --bin gen -- --rows 10M --cols 12`
+gen = ["dep:clap"]
+
+[[bin]]
+name = "gen"
+path = "src/bin/gen.rs"
+required-features = ["gen"]
 
 [dev-dependencies]
+criterion = { workspace = true }
+csv = { workspace = true }
+insta = { workspace = true }
+json5 = { workspace = true }
 pretty_assertions = { workspace = true }
+proptest = { workspace = true }
+# Multi-threaded runtime for `#[tokio::test(flavor = "multi_thread")]` and benches.
+tokio = { workspace = true, features = ["rt-multi-thread", "macros"] }
+
+[[bench]]
+name = "sniff"
+harness = false
+
+[[bench]]
+name = "index"
+harness = false
+
+[[bench]]
+name = "filter"
+harness = false
+
+[[bench]]
+name = "sort"
+harness = false

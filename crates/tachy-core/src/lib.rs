@@ -1,13 +1,34 @@
-//! Domain logic for the application, with no knowledge of the terminal.
+//! Domain logic for tachy, with no knowledge of the terminal.
 //!
-//! Keep everything here UI-agnostic. The `tachy` crate owns rendering, key
-//! handling and the event loop; this crate owns state and the rules that
-//! govern it, so it can be unit tested without spawning a terminal.
-//!
-//! Replace [`Core`] and [`enum@Error`] with your own domain types.
+//! Everything here is UI-agnostic: no `ratatui`, `crossterm` or `clap`. The
+//! `tachy` crate owns rendering, key handling and the event loop; this crate
+//! owns file access, parsing, views, queries and background work, so it can be
+//! unit tested without a terminal.
 
-use serde::{Deserialize, Serialize};
+use std::{io, path::PathBuf};
+
 use thiserror::Error;
+
+pub mod cache;
+pub mod column;
+pub mod dialect;
+pub mod exec;
+pub mod export;
+pub mod filter;
+pub mod index;
+pub mod jobs;
+pub mod parse;
+pub mod query;
+pub mod sample;
+pub mod search;
+pub mod size;
+pub mod sort;
+pub mod source;
+pub mod spool;
+pub mod stats;
+pub mod text;
+pub mod types;
+pub mod view;
 
 /// Errors produced by the core.
 ///
@@ -18,55 +39,21 @@ pub enum Error {
     /// The core was asked to do something its current state does not allow.
     #[error("invalid state transition: {0}")]
     InvalidState(String),
+
+    /// An I/O operation on `path` failed.
+    #[error("{}: {source}", path.display())]
+    Io {
+        /// The file or directory involved.
+        path: PathBuf,
+        /// The underlying error.
+        #[source]
+        source: io::Error,
+    },
+
+    /// The operation was cancelled before it finished.
+    #[error("cancelled")]
+    Cancelled,
 }
 
 /// Convenience alias used throughout this crate.
 pub type Result<T, E = Error> = std::result::Result<T, E>;
-
-/// The application's domain state.
-///
-/// This placeholder exists so the `tachy` -> `tachy-core` seam is wired and
-/// compiled by CI from the first commit. Swap the contents for your own model.
-#[derive(Debug, Default, Clone, PartialEq, Eq, Serialize, Deserialize)]
-pub struct Core {
-    ticks: u64,
-}
-
-impl Core {
-    /// Build the initial domain state.
-    pub fn new() -> Result<Self> {
-        Ok(Self::default())
-    }
-
-    /// Advance the domain clock by one tick.
-    pub fn tick(&mut self) {
-        self.ticks = self.ticks.saturating_add(1);
-    }
-
-    /// Number of ticks observed so far.
-    pub fn ticks(&self) -> u64 {
-        self.ticks
-    }
-}
-
-#[cfg(test)]
-mod tests {
-    use pretty_assertions::assert_eq;
-
-    use super::*;
-
-    #[test]
-    fn new_core_starts_at_zero_ticks() -> Result<()> {
-        assert_eq!(Core::new()?.ticks(), 0);
-        Ok(())
-    }
-
-    #[test]
-    fn tick_advances_the_counter() -> Result<()> {
-        let mut core = Core::new()?;
-        core.tick();
-        core.tick();
-        assert_eq!(core.ticks(), 2);
-        Ok(())
-    }
-}

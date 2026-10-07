@@ -1,0 +1,252 @@
+{
+  "backslash_quotes.csv": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "escape": "backslash",
+    "header": true,
+    "line_ending": "lf",
+    "quote": "\"",
+    "quoted_newlines": false,
+    "sample_truncated": false
+  },
+  "colon.txt": {
+    "delimiter": ":",
+    "encoding": "utf-8",
+    "escape": "doubled",
+    "header": true,
+    "line_ending": "lf",
+    "quote": null,
+    "quoted_newlines": false,
+    "sample_truncated": false
+  },
+  "comma.csv": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "escape": "doubled",
+    "header": true,
+    "line_ending": "lf",
+    "quote": null,
+    "quoted_newlines": false,
+    "sample_truncated": false
+  },
+  "crlf.csv": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "escape": "doubled",
+    "header": true,
+    "line_ending": "crlf",
+    "quote": null,
+    "quoted_newlines": false,
+    "sample_truncated": false
+  },
+  "doubled_quotes.csv": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "escape": "doubled",
+    "header": true,
+    "line_ending": "lf",
+    "quote": "\"",
+    "quoted_newlines": false,
+    "sample_truncated": false
+  },
+  "duplicate_headers.csv": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "escape": "doubled",
+    "header": true,
+    "line_ending": "lf",
+    "quote": null,
+    "quoted_newlines": false,
+    "sample_truncated": false
+  },
+  "headerless_numeric.csv": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "escape": "doubled",
+    "header": false,
+    "line_ending": "lf",
+    "quote": null,
+    "quoted_newlines": false,
+    "sample_truncated": false
+  },
+  "identifiers_header.csv": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "escape": "doubled",
+    "header": true,
+    "line_ending": "lf",
+    "quote": null,
+    "quoted_newlines": false,
+    "sample_truncated": false
+  },
+  "long_mid_record.csv": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "escape": "doubled",
+    "header": true,
+    "line_ending": "lf",
+    "quote": "\"",
+    "quoted_newlines": true,
+    "sample_truncated": true
+  },
+  "mixed_endings.csv": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "escape": "doubled",
+    "header": true,
+    "line_ending": "mixed",
+    "quote": null,
+    "quoted_newlines": false,
+    "sample_truncated": false
+  },
+  "no_trailing_newline.csv": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "escape": "doubled",
+    "header": true,
+    "line_ending": "lf",
+    "quote": null,
+    "quoted_newlines": false,
+    "sample_truncated": false
+  },
+  "one_line.csv": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "escape": "doubled",
+    "header": true,
+    "line_ending": "lf",
+    "quote": null,
+    "quoted_newlines": false,
+    "sample_truncated": false
+  },
+  "pipe.psv": {
+    "delimiter": "|",
+    "encoding": "utf-8",
+    "escape": "doubled",
+    "header": true,
+    "line_ending": "lf",
+    "quote": null,
+    "quoted_newlines": false,
+    "sample_truncated": false
+  },
+  "quoted_delims.csv": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "escape": "doubled",
+    "header": true,
+    "line_ending": "lf",
+    "quote": "\"",
+    "quoted_newlines": false,
+    "sample_truncated": false
+  },
+  "quoted_newlines.csv": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "escape": "doubled",
+    "header": true,
+    "line_ending": "lf",
+    "quote": "\"",
+    "quoted_newlines": true,
+    "sample_truncated": false
+  },
+  "semicolon.csv": {
+    "delimiter": ";",
+    "encoding": "utf-8",
+    "escape": "doubled",
+    "header": true,
+    "line_ending": "lf",
+    "quote": null,
+    "quoted_newlines": false,
+    "sample_truncated": false
+  },
+  "single_column.txt": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "escape": "doubled",
+    "header": true,
+    "line_ending": "lf",
+    "quote": null,
+    "quoted_newlines": false,
+    "sample_truncated": false
+  },
+  "single_quote.csv": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "escape": "doubled",
+    "header": true,
+    "line_ending": "lf",
+    "quote": "'",
+    "quoted_newlines": false,
+    "sample_truncated": false
+  },
+  "space.txt": {
+    "delimiter": " ",
+    "encoding": "utf-8",
+    "escape": "doubled",
+    "header": true,
+    "line_ending": "lf",
+    "quote": null,
+    "quoted_newlines": false,
+    "sample_truncated": false
+  },
+  "tab.tsv": {
+    "delimiter": "\t",
+    "encoding": "utf-8",
+    "escape": "doubled",
+    "header": true,
+    "line_ending": "lf",
+    "quote": null,
+    "quoted_newlines": false,
+    "sample_truncated": false
+  },
+  "utf16_twin_utf8.csv": {
+    "delimiter": ",",
+    "encoding": "utf-8",
+    "escape": "doubled",
+    "header": true,
+    "line_ending": "lf",
+    "quote": "\"",
+    "quoted_newlines": false,
+    "sample_truncated": false
+  },
+  "utf16be.csv": {
+    "delimiter": ",",
+    "encoding": "utf-16be",
+    "escape": "doubled",
+    "header": true,
+    "line_ending": "lf",
+    "quote": "\"",
+    "quoted_newlines": false,
+    "sample_truncated": false
+  },
+  "utf16le.csv": {
+    "delimiter": ",",
+    "encoding": "utf-16le",
+    "escape": "doubled",
+    "header": true,
+    "line_ending": "lf",
+    "quote": "\"",
+    "quoted_newlines": false,
+    "sample_truncated": false
+  },
+  "utf8_bom.csv": {
+    "delimiter": ",",
+    "encoding": "utf-8-bom",
+    "escape": "doubled",
+    "header": true,
+    "line_ending": "lf",
+    "quote": null,
+    "quoted_newlines": false,
+    "sample_truncated": false
+  },
+  "windows1252.csv": {
+    "delimiter": ",",
+    "encoding": "windows-1252",
+    "escape": "doubled",
+    "header": true,
+    "line_ending": "lf",
+    "quote": null,
+    "quoted_newlines": false,
+    "sample_truncated": false
+  }
+}

@@ -1,0 +1,28 @@
+---
+source: crates/tachy/src/app/tests.rs
+expression: terminal.backend()
+---
+" tachy                                                                   NORMAL "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                      no file open — ctrl-o to open a file                      "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+" cannot open missing.csv: file not found                                   (+1) "
+" no file open                                                                   "
+" / search  f filter  s sort  i inspect  : command  J jobs  q quit        ? help "

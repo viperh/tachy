@@ -1,0 +1,76 @@
+name: Bench # criterion benches of tachy-core, PR vs. base branch (M7-05, §19)
+
+# Informational only: shared runners are noisy, so this never fails a PR on a
+# regression. The hard gate is the manual run on the reference machine
+# (8-core, NVMe, warm page cache; see benches/README.md), listed in the PR
+# checklist.
+
+on:
+  pull_request:
+    paths:
+      - "crates/tachy-core/**"
+      - "Cargo.toml"
+      - "Cargo.lock"
+      - ".github/workflows/bench.yml"
+
+concurrency:
+  group: bench-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  CARGO_TERM_COLOR: always
+  # Generated bench files, in MiB. Small enough for a hosted runner's disk
+  # and RAM; throughput per GB is what the comparison looks at.
+  TACHY_BENCH_MB: "256"
+
+jobs:
+  bench:
+    name: Benchmarks (PR vs. base)
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - name: Install Rust toolchain
+        uses: dtolnay/rust-toolchain@stable
+      - uses: Swatinem/rust-cache@v2
+      - name: Install critcmp
+        run: cargo install critcmp --locked
+
+      # Baseline: the PR's base branch, built in a separate worktree but into
+      # the same target dir, so both runs land in target/criterion.
+      - name: Bench base branch (baseline "main")
+        # The base may predate some benches, or not build them at all.
+        continue-on-error: true
+        run: |
+          git worktree add "$RUNNER_TEMP/base" "origin/${{ github.base_ref }}"
+          cd "$RUNNER_TEMP/base"
+          CARGO_TARGET_DIR="$GITHUB_WORKSPACE/target" \
+            cargo bench -p tachy-core --benches -- --save-baseline main --noplot
+
+      - name: Bench PR (baseline "pr")
+        run: cargo bench -p tachy-core --benches -- --save-baseline pr --noplot
+
+      - name: Compare
+        run: |
+          {
+            echo '## Benchmarks: base (`main`) vs. this PR (`pr`)'
+            echo
+            echo 'Informational only (shared runner). See benches/README.md for the reference-machine results.'
+            echo
+            echo '```'
+            critcmp main pr || critcmp pr
+            echo '```'
+          } | tee critcmp.md
+          cat critcmp.md >> "$GITHUB_STEP_SUMMARY"
+
+      - name: Upload comparison
+        uses: actions/upload-artifact@v4
+        with:
+          name: critcmp
+          path: |
+            critcmp.md
+            target/criterion
+          retention-days: 14

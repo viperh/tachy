@@ -1,0 +1,23 @@
+---
+source: crates/tachy/src/app/tests/dialogs.rs
+expression: inspector_text(&terminal)
+---
+ COLUMN
+ city · enum · col 3/5
+ nulls     0.0%
+ distinct  ~5
+ max width 7
+
+ TOP VALUES · sample 30 rows
+ Berlin         ████████████████      6
+ Lisbon         ████████████████      6
+ Nairobi        ████████████████      6
+ Osaka          ████████████████      6
+ Toronto        ████████████████      6
+
+ RECORD
+ id            1
+ name          user001
+ city          Lisbon
+ amount        37.07
+ note          ok

@@ -1,0 +1,7 @@
+---
+source: crates/tachy/src/app/tests.rs
+expression: chrome(&terminal)
+---
+ tachy  1 t.csv                                         view: all rows   NORMAL 
+ t.csv · ≥ 19 rows (counting…) · 49%                      R 1 / ≥ 19  C 1/5  0% 
+ / search  f filter  s sort  i inspect  : command  J jobs  q quit        ? help

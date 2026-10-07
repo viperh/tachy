@@ -10,7 +10,7 @@ edition = "2024"
 authors = ["qvipehr <olteanromeodavid34@gmail.com>"]
 license = "MIT"
 repository = "https://github.com/viperh/tachy"
-rust-version = "1.85"
+rust-version = "1.90"
 
 # Central dependency versions. Crates reference these with
 # `some-dep = { workspace = true }` so versions stay in lockstep.
@@ -24,9 +24,27 @@ ratatui = { version = "0.30.2", features = ["serde", "macros"] }
 signal-hook = "0.4.4"
 
 # --- async runtime ---
+# `tokio` has no default features; each crate opts into the ones it needs
+# (`tachy` uses "full", `tachy-core` only the non-UI subset, README §A2).
 futures = "0.3.32"
-tokio = { version = "1.52.3", features = ["full"] }
+tokio = { version = "1.52.3", default-features = false }
 tokio-util = "0.7.18"
+
+# --- data processing (tachy-core) ---
+csv-core = "0.1.13"
+encoding_rs = "0.8.42"
+memchr = "2.8.3"
+memmap2 = "0.9.11"
+regex = "1.13.1"
+roaring = "0.11.5"
+smallvec = "1.16.0"
+tempfile = "3.27.0"
+unicode-segmentation = "1.13.3"
+unicode-width = "0.2.2"
+
+# --- ui helpers (tachy) ---
+globset = "0.4.20"
+nucleo-matcher = "0.3.1"
 
 # --- cli / config ---
 clap = { version = "4.6.1", features = [
@@ -63,11 +81,34 @@ anyhow = "1.0.103"
 vergen-gix = { version = "10.0.1", features = ["build", "cargo"] }
 
 # --- dev ---
+# rayon is off: the project does not use it (README §A2). criterion pulls in
+# clap as a dev-only dependency; `tachy-core` normal deps stay clap-free.
+criterion = { version = "0.8.2", default-features = false, features = ["cargo_bench_support", "html_reports", "plotters"] }
+insta = { version = "1.49.0", features = ["yaml"] }
+# Independent reference CSV parser for export round-trip tests (M6-01).
+csv = "1.4.0"
 pretty_assertions = "1.4.1"
+proptest = "1.11.0"
+# Pseudo-terminal end-to-end tests of the binary (`crates/tachy/tests/pty.rs`),
+# and a terminal emulator to read back the screen.
+portable-pty = "0.9.0"
+vt100 = "0.16.2"
 
 # Read the optimization guideline for more details: https://ratatui.rs/recipes/apps/release-your-app/#optimizations
+# Full optimisation (not "s"): the §17 throughput targets depend on it.
 [profile.release]
 codegen-units = 1
 lto = true
-opt-level = "s"
+opt-level = 3
 strip = true
+
+# Benchmarks: release settings, but keep symbols so flamegraphs stay readable.
+[profile.bench]
+inherits = "release"
+debug = true
+strip = false
+
+# Optimise dependencies (csv-core, memchr, regex, roaring, ...) even in debug
+# builds so large files stay usable while developing.
+[profile.dev.package."*"]
+opt-level = 2

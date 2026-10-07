@@ -1,0 +1,28 @@
+---
+source: crates/tachy/src/app/tests.rs
+expression: terminal.backend()
+---
+"                                                                               "
+"                                                                               "
+"                                                                               "
+"                                                                               "
+"                                                                               "
+"                                                                               "
+"                                                                               "
+"                                                                               "
+"                                                                               "
+"                                                                               "
+"                                                                               "
+"                              terminal too small                               "
+"                              79×24 — need 80×24                               "
+"                                                                               "
+"                                                                               "
+"                                                                               "
+"                                                                               "
+"                                                                               "
+"                                                                               "
+"                                                                               "
+"                                                                               "
+"                                                                               "
+"                                                                               "
+"                                                                               "

@@ -21,27 +21,50 @@ color-eyre = { workspace = true }
 config = { workspace = true }
 crossterm = { workspace = true }
 directories = { workspace = true }
+encoding_rs = { workspace = true }
 futures = { workspace = true }
+globset = { workspace = true }
 human-panic = { workspace = true }
 json5 = { workspace = true }
 libc = { workspace = true }
+nucleo-matcher = { workspace = true }
 ratatui = { workspace = true }
 serde = { workspace = true }
 strip-ansi-escapes = { workspace = true }
 strum = { workspace = true }
-tokio = { workspace = true }
+tempfile = { workspace = true }
+tokio = { workspace = true, features = ["full"] }
 tokio-util = { workspace = true }
 tracing = { workspace = true }
 tracing-error = { workspace = true }
 tracing-subscriber = { workspace = true }
+unicode-segmentation = { workspace = true }
+unicode-width = { workspace = true }
 
 # `Tui::suspend` raises SIGTSTP, which only exists on unix.
 [target.'cfg(not(windows))'.dependencies]
 signal-hook = { workspace = true }
+
+# `use-dev-tty` reads keys from /dev/tty, so input works when stdin is a pipe
+# (`cat x.csv | tachy -`). It is Unix-only in crossterm, so it is enabled only
+# there to keep the Windows build compiling.
+[target.'cfg(unix)'.dependencies]
+crossterm = { workspace = true, features = ["use-dev-tty"] }
 
 [build-dependencies]
 anyhow = { workspace = true }
 vergen-gix = { workspace = true }
 
 [dev-dependencies]
+# `test-util`: paused virtual time in event-loop tests.
+tokio = { workspace = true, features = ["full", "test-util"] }
+criterion = { workspace = true }
+insta = { workspace = true }
 pretty_assertions = { workspace = true }
+proptest = { workspace = true }
+roaring = { workspace = true }
+
+# The pty end-to-end test is Unix-only (stdin spooling, /dev/tty).
+[target.'cfg(unix)'.dev-dependencies]
+portable-pty = { workspace = true }
+vt100 = { workspace = true }

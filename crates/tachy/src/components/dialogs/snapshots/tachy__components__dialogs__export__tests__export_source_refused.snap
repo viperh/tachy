@@ -1,0 +1,19 @@
+---
+source: crates/tachy/src/components/dialogs/export.rs
+expression: render(&f).backend()
+---
+"                                                                                    "
+"  ┌ Export ──────────────────────────────────────────────────────────────────────┐  "
+"  │                                                                              │  "
+"  │ › Path       /data/orders.csv                                                │  "
+"  │   Delimiter  ,   \t   |   ;                                                  │  "
+"  │   Quoting    minimal   all                                                   │  "
+"  │   Header     on   off                                                        │  "
+"  │   Columns    all   visible                                                   │  "
+"  │                                                                              │  "
+"  │ refusing to overwrite the source file                                        │  "
+"  │ 12,345 rows · est. 4.1 MB                                                    │  "
+"  │                                                                              │  "
+"  │ Enter export · Esc cancel · Tab complete/next · ↑↓ field                     │  "
+"  └──────────────────────────────────────────────────────────────────────────────┘  "
+"                                                                                    "

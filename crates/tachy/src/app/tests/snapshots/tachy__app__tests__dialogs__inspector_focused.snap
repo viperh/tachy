@@ -1,0 +1,16 @@
+---
+source: crates/tachy/src/app/tests/dialogs.rs
+expression: inspector_text(&terminal)
+---
+ COLUMN
+ id · bool · col 1/2
+ nulls     0.0%
+ distinct  ~1
+ max width 1
+
+ TOP VALUES · sample 1 rows
+ 1              ████████████████      1
+
+ RECORD
+ id            1
+ text          xxxxxxxxxxxxxxxxxxxxxxx…

@@ -13,22 +13,26 @@ pub fn init() -> color_eyre::Result<()> {
         .display_env_section(false)
         .into_hooks();
     eyre_hook.install()?;
+    // Order: restore the terminal → print → exit (§16). The hook may run on
+    // the main task, a tokio worker or a `spawn_blocking` thread, so it must
+    // not need a runtime: `restore_terminal` uses plain crossterm calls.
     std::panic::set_hook(Box::new(move |panic_info| {
-        if let Ok(mut t) = crate::tui::Tui::new() {
-            if let Err(r) = t.exit() {
-                error!("Unable to exit Terminal: {:?}", r);
-            }
+        if let Err(r) = crate::tui::restore_terminal() {
+            error!("Unable to restore the terminal: {:?}", r);
         }
 
         #[cfg(not(debug_assertions))]
         {
+            use std::io::Write;
+
             use human_panic::{handle_dump, metadata, print_msg};
             let metadata = metadata!();
             let file_path = handle_dump(&metadata, panic_info);
             // prints human-panic message
-            print_msg(file_path, &metadata)
-                .expect("human-panic: printing error message to console failed");
-            eprintln!("{}", panic_hook.panic_report(panic_info)); // prints color-eyre stack trace to stderr
+            // stderr may be gone (the terminal hung up): never panic again
+            // inside the hook.
+            let _ = print_msg(file_path, &metadata);
+            let _ = writeln!(std::io::stderr(), "{}", panic_hook.panic_report(panic_info));
         }
         let msg = format!("{}", panic_hook.panic_report(panic_info));
         error!("Error: {}", strip_ansi_escapes::strip_str(msg));

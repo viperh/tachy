@@ -1,8 +1,210 @@
 {
+  // Built-in defaults (spec §15, README §A4). A user file (`config.json5`,
+  // `config.json`, `config.yaml`, `config.toml` or `config.ini` in the config
+  // directory, `$TACHY_CONFIG` or `~/.config/tachy/` on Linux) is layered on
+  // top: CLI flags > user config > these defaults. Every key is optional.
+  "theme": "dark", // --theme
+  "threads": 0, // -j; 0 = logical CPUs
+  "memory": "2G", // -m; a size string or a number of bytes
+  // "tmp_dir": "/var/tmp", // --tmp; default: the system temp dir
+  "hints": true, // key-hint line
+  "inspector": true, // inspector panel
+  "freeze": 1, // frozen leading columns
+  "max_column_width": 40, // 4 to 1000
+  "null_values": ["", "NULL", "null", "NA", "N/A", "\\N"],
+  "sniff": {
+    "sample_bytes": 65536, // 4 KiB to 16 MiB
+    "confirm": true // show the Detected format dialog; --yes turns it off
+  },
+  // Read-only saved views: [{ "name": ..., "file_glob": ..., "filter": ... }].
+  // `ctrl-s` writes `views.json` in the config directory instead.
+  "views": [],
+
+  // Default key bindings (spec §13). Top-level `keybindings` keys are
+  // `KeyContext` names (crates/tachy/src/mode.rs); values are `Action`
+  // variant names (crates/tachy/src/action.rs).
+  //
+  // Key syntax (crates/tachy/src/keymap.rs): a single character keeps its
+  // case ("G" is shift-g); modifiers (`ctrl-`, `alt-`, `shift-`) and named
+  // keys (`enter`, `esc`, `pgdn`, ...) are case-insensitive; the `<...>`
+  // wrapper is optional. Write `<` and `>` as "<lt>" and "<gt>". Multi-key
+  // sequences are not supported.
+  //
+  // Contexts: Normal, Filter, Search, Command, Prompt, Inspector, JobsDrawer,
+  // DetectedFormat, Goto, ColumnChooser, Export, ValuePopup, Confirm, Help.
+  // A user entry for a chord replaces the default action of that chord;
+  // the value "None" removes the default binding (e.g. "f": "None").
   "keybindings": {
     "Normal": {
-      "<Ctrl-q>": "Quit",
-      "<Ctrl-h>": "Help"
+      "h": "MoveLeft",
+      "<left>": "MoveLeft",
+      "j": "MoveDown",
+      "<down>": "MoveDown",
+      "k": "MoveUp",
+      "<up>": "MoveUp",
+      "l": "MoveRight",
+      "<right>": "MoveRight",
+      "<ctrl-d>": "HalfPageDown",
+      "<ctrl-u>": "HalfPageUp",
+      "<pgdn>": "PageDown",
+      "<pgup>": "PageUp",
+      "<home>": "FirstRow",
+      "G": "LastRow",
+      "0": "FirstCol",
+      "$": "LastCol",
+      "w": "NextCol",
+      "b": "PrevCol",
+      "g": "Goto",
+      "1": "Tab1",
+      "2": "Tab2",
+      "3": "Tab3",
+      "4": "Tab4",
+      "5": "Tab5",
+      "6": "Tab6",
+      "7": "Tab7",
+      "8": "Tab8",
+      "9": "Tab9",
+      "<ctrl-o>": "OpenFile",
+      "<ctrl-w>": "CloseTab",
+      "/": "Search",
+      "n": "SearchNext",
+      "N": "SearchPrev",
+      "f": "Filter",
+      "F": "RefineFilter",
+      "x": "PopView",
+      "s": "SortAsc",
+      "S": "SortDesc",
+      "c": "ColumnChooser",
+      "<lt>": "ShrinkCol",
+      "<gt>": "GrowCol",
+      "=": "AutofitCol",
+      "i": "ToggleInspector",
+      "<tab>": "FocusNext",
+      "<enter>": "JumpToSource",
+      "y": "CopyCell",
+      "Y": "CopyRow",
+      "e": "Export",
+      "J": "ToggleJobs",
+      ":": "CommandPalette",
+      "?": "Help",
+      "q": "Quit",
+      "<ctrl-c>": "Quit",
+      "<ctrl-q>": "Quit",
+      "R": "Reload",
+      "<ctrl-z>": "Suspend",
+      "<esc>": "Dismiss"
+    },
+    "Filter": {
+      "<enter>": "Submit",
+      "<esc>": "Cancel",
+      "<up>": "HistoryPrev",
+      "<down>": "HistoryNext",
+      "<tab>": "Complete",
+      "<ctrl-s>": "SaveView"
+    },
+    "Search": {
+      "<enter>": "Submit",
+      "<esc>": "Cancel",
+      "<up>": "HistoryPrev",
+      "<down>": "HistoryNext",
+      "<tab>": "Complete"
+    },
+    "Command": {
+      "<enter>": "Submit",
+      "<esc>": "Cancel",
+      "<up>": "SelectPrev",
+      "<down>": "SelectNext",
+      "<tab>": "Complete"
+    },
+    "Prompt": {
+      "<enter>": "Submit",
+      "<esc>": "Cancel",
+      "<tab>": "Complete"
+    },
+    "Inspector": {
+      "j": "SelectNext",
+      "<down>": "SelectNext",
+      "k": "SelectPrev",
+      "<up>": "SelectPrev",
+      "<enter>": "OpenValue",
+      "<tab>": "FocusNext",
+      "<esc>": "Cancel"
+    },
+    "JobsDrawer": {
+      "j": "SelectNext",
+      "<down>": "SelectNext",
+      "k": "SelectPrev",
+      "<up>": "SelectPrev",
+      "p": "PauseJob",
+      "K": "KillJob",
+      "d": "DismissJob",
+      "<tab>": "FocusNext",
+      "<esc>": "Cancel"
+    },
+    "ColumnChooser": {
+      "j": "SelectNext",
+      "<down>": "SelectNext",
+      "k": "SelectPrev",
+      "<up>": "SelectPrev",
+      "<space>": "ToggleVisible",
+      "J": "MoveColumnDown",
+      "<shift-down>": "MoveColumnDown",
+      "K": "MoveColumnUp",
+      "<shift-up>": "MoveColumnUp",
+      "a": "ShowAll",
+      "/": "FilterList",
+      "<enter>": "Submit",
+      "<esc>": "Cancel"
+    },
+    "DetectedFormat": {
+      "<enter>": "Submit",
+      "<esc>": "Cancel",
+      "d": "CycleDelimiter",
+      "h": "ToggleHeader",
+      "q": "CycleQuote",
+      "r": "ToggleRaw"
+    },
+    "Goto": {
+      "<enter>": "Submit",
+      "<esc>": "Cancel"
+    },
+    "Export": {
+      "<enter>": "Submit",
+      "<esc>": "Cancel",
+      "<tab>": "Complete",
+      "<backtab>": "SelectPrev",
+      "<down>": "SelectNext",
+      "<up>": "SelectPrev"
+    },
+    "ValuePopup": {
+      "j": "SelectNext",
+      "<down>": "SelectNext",
+      "k": "SelectPrev",
+      "<up>": "SelectPrev",
+      "<pgdn>": "PageDown",
+      "<pgup>": "PageUp",
+      "<home>": "FirstRow",
+      "G": "LastRow",
+      "<enter>": "Cancel",
+      "<esc>": "Cancel"
+    },
+    "Confirm": {
+      "y": "Submit",
+      "<enter>": "Submit",
+      "n": "Cancel",
+      "<esc>": "Cancel"
+    },
+    "Help": {
+      "?": "Help",
+      "<esc>": "Cancel",
+      "j": "SelectNext",
+      "<down>": "SelectNext",
+      "k": "SelectPrev",
+      "<up>": "SelectPrev",
+      "<pgdn>": "PageDown",
+      "<pgup>": "PageUp",
+      "<home>": "FirstRow",
+      "G": "LastRow"
     }
   },
   "styles": {

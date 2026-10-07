@@ -1,0 +1,44 @@
+---
+source: crates/tachy/src/app/tests.rs
+expression: style_dump(&terminal)
+---
+ 0: 0-6 Reset/Reset/BOLD | 7-15 Reset/Reset/BOLD | UNDERLINED | 16-95 Reset/Reset/NONE | 96-111 Reset/Reset/DIM | 112-119 Reset/Reset/BOLD | REVERSED
+ 1: 0-5 Reset/Reset/NONE | 6-10 Reset/Reset/BOLD | UNDERLINED | 11-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-13 Reset/Reset/NONE | 14-18 Reset/Reset/BOLD | 19-19 Reset/Reset/NONE | 20-24 Reset/Reset/BOLD | 25-25 Reset/Reset/NONE | 26-30 Reset/Reset/BOLD | 31-31 Reset/Reset/NONE | 32-36 Reset/Reset/BOLD | 37-37 Reset/Reset/NONE | 38-42 Reset/Reset/BOLD | 43-43 Reset/Reset/NONE | 44-48 Reset/Reset/BOLD | 49-49 Reset/Reset/NONE | 50-54 Reset/Reset/BOLD | 55-55 Reset/Reset/NONE | 56-60 Reset/Reset/BOLD | 61-61 Reset/Reset/NONE | 62-66 Reset/Reset/BOLD | 67-67 Reset/Reset/NONE | 68-73 Reset/Reset/BOLD | 74-74 Reset/Reset/NONE | 75-78 Reset/Reset/BOLD | 79-80 Reset/Reset/NONE | 81-86 Reset/Reset/DIM | 87-119 Reset/Reset/NONE
+ 2: 0-5 Reset/Reset/NONE | 6-10 Reset/Reset/DIM | 11-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-13 Reset/Reset/NONE | 14-18 Reset/Reset/DIM | 19-19 Reset/Reset/NONE | 20-24 Reset/Reset/DIM | 25-25 Reset/Reset/NONE | 26-30 Reset/Reset/DIM | 31-31 Reset/Reset/NONE | 32-36 Reset/Reset/DIM | 37-37 Reset/Reset/NONE | 38-42 Reset/Reset/DIM | 43-43 Reset/Reset/NONE | 44-48 Reset/Reset/DIM | 49-49 Reset/Reset/NONE | 50-54 Reset/Reset/DIM | 55-55 Reset/Reset/NONE | 56-60 Reset/Reset/DIM | 61-61 Reset/Reset/NONE | 62-66 Reset/Reset/DIM | 67-67 Reset/Reset/NONE | 68-73 Reset/Reset/DIM | 74-74 Reset/Reset/NONE | 75-78 Reset/Reset/DIM | 79-80 Reset/Reset/NONE | 81-82 Reset/Reset/BOLD | 83-99 Reset/Reset/DIM | 100-119 Reset/Reset/NONE
+ 3: 0-5 Reset/Reset/BOLD | 6-10 Reset/Reset/BOLD | REVERSED | 11-78 Reset/Reset/BOLD | 79-80 Reset/Reset/NONE | 81-89 Reset/Reset/DIM | 90-119 Reset/Reset/NONE
+ 4: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-119 Reset/Reset/NONE
+ 5: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-80 Reset/Reset/NONE | 81-90 Reset/Reset/DIM | 91-119 Reset/Reset/NONE
+ 6: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-80 Reset/Reset/NONE | 81-89 Reset/Reset/DIM | 90-119 Reset/Reset/NONE
+ 7: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-119 Reset/Reset/NONE
+ 8: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-80 Reset/Reset/NONE | 81-86 Reset/Reset/DIM | 87-119 Reset/Reset/NONE
+ 9: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-80 Reset/Reset/NONE | 81-92 Reset/Reset/DIM | 93-119 Reset/Reset/NONE
+10: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-80 Reset/Reset/NONE | 81-92 Reset/Reset/DIM | 93-119 Reset/Reset/NONE
+11: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-80 Reset/Reset/NONE | 81-92 Reset/Reset/DIM | 93-119 Reset/Reset/NONE
+12: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-80 Reset/Reset/NONE | 81-92 Reset/Reset/DIM | 93-119 Reset/Reset/NONE
+13: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-80 Reset/Reset/NONE | 81-92 Reset/Reset/DIM | 93-119 Reset/Reset/NONE
+14: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-80 Reset/Reset/NONE | 81-92 Reset/Reset/DIM | 93-119 Reset/Reset/NONE
+15: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-80 Reset/Reset/NONE | 81-92 Reset/Reset/DIM | 93-119 Reset/Reset/NONE
+16: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-80 Reset/Reset/NONE | 81-92 Reset/Reset/DIM | 93-119 Reset/Reset/NONE
+17: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-80 Reset/Reset/NONE | 81-92 Reset/Reset/DIM | 93-119 Reset/Reset/NONE
+18: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-80 Reset/Reset/NONE | 81-92 Reset/Reset/DIM | 93-119 Reset/Reset/NONE
+19: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-80 Reset/Reset/NONE | 81-92 Reset/Reset/DIM | 93-119 Reset/Reset/NONE
+20: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-80 Reset/Reset/NONE | 81-92 Reset/Reset/DIM | 93-119 Reset/Reset/NONE
+21: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-119 Reset/Reset/NONE
+22: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-119 Reset/Reset/NONE
+23: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-119 Reset/Reset/NONE
+24: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-119 Reset/Reset/NONE
+25: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-119 Reset/Reset/NONE
+26: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-119 Reset/Reset/NONE
+27: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-119 Reset/Reset/NONE
+28: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-119 Reset/Reset/NONE
+29: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-119 Reset/Reset/NONE
+30: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-119 Reset/Reset/NONE
+31: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-119 Reset/Reset/NONE
+32: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-119 Reset/Reset/NONE
+33: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-119 Reset/Reset/NONE
+34: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-119 Reset/Reset/NONE
+35: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-119 Reset/Reset/NONE
+36: 0-2 Reset/Reset/DIM | 3-11 Reset/Reset/NONE | 12-12 Reset/Reset/BOLD | 13-119 Reset/Reset/NONE
+37: 0-119 Reset/Reset/BOLD
+38: 0-0 Reset/Reset/NONE | 1-5 Reset/Reset/BOLD | 6-8 Reset/Reset/DIM | 9-14 Reset/Reset/NONE | 15-17 Reset/Reset/DIM | 18-24 Reset/Reset/NONE | 25-82 Reset/Reset/DIM | 83-116 Reset/Reset/NONE | 117-118 Reset/Reset/DIM | 119-119 Reset/Reset/NONE
+39: 0-0 Reset/Reset/NONE | 1-1 Reset/Reset/BOLD | 2-8 Reset/Reset/DIM | 9-10 Reset/Reset/NONE | 11-11 Reset/Reset/BOLD | 12-18 Reset/Reset/DIM | 19-20 Reset/Reset/NONE | 21-21 Reset/Reset/BOLD | 22-26 Reset/Reset/DIM | 27-28 Reset/Reset/NONE | 29-29 Reset/Reset/BOLD | 30-37 Reset/Reset/DIM | 38-39 Reset/Reset/NONE | 40-40 Reset/Reset/BOLD | 41-48 Reset/Reset/DIM | 49-50 Reset/Reset/NONE | 51-51 Reset/Reset/BOLD | 52-56 Reset/Reset/DIM | 57-58 Reset/Reset/NONE | 59-59 Reset/Reset/BOLD | 60-64 Reset/Reset/DIM | 65-112 Reset/Reset/NONE | 113-113 Reset/Reset/BOLD | 114-118 Reset/Reset/DIM | 119-119 Reset/Reset/NONE

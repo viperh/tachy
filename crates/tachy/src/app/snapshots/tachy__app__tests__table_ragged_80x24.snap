@@ -1,0 +1,28 @@
+---
+source: crates/tachy/src/app/tests.rs
+expression: terminal.backend()
+---
+" tachy  1 t.csv                                         view: all rows   NORMAL "
+"    │ a   │ b   c   _extra1                                                     "
+"    │ str │ str str str                                                         "
+"  1 │ 1   │ 2   3                                                               "
+"  2 │ 4   │ 5                                                                   "
+"  3 │ 6   │ 7   8   9                                                           "
+"  4 │ 10  │ 11  12                                                              "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+"                                                                                "
+" t.csv · 33 B · 4 rows · mmap · index ready · 2 ragged       R 1 / 4  C 1/4  0% "
+" / search  f filter  s sort  i inspect  : command  J jobs  q quit        ? help "

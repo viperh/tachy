@@ -1,0 +1,24 @@
+---
+source: crates/tachy/src/app/tests/dialogs.rs
+expression: inspector_text(&terminal)
+---
+ COLUMN
+ name · str · col 2/5
+ nulls     0.0%
+ distinct  ~30
+ max width 7
+
+ TOP VALUES · sample 30 rows
+ user001        ▋███████████████      1
+ user002        ▋███████████████      1
+ user003        ▋███████████████      1
+ user004        ▋███████████████      1
+ user005        ▋███████████████      1
+ other          ████████████████     25
+
+ RECORD
+ id            1
+ name          user001
+ city          Lisbon
+ amount        37.07
+ note          ok

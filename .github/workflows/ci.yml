@@ -18,6 +18,12 @@ jobs:
         uses: dtolnay/rust-toolchain@stable
       - uses: Swatinem/rust-cache@v2
       - name: Run tests
+        env:
+          # Snapshot mismatches fail instead of writing `.snap.new` files.
+          INSTA_UPDATE: "no"
+          CI: "true"
+          # Keeps the property-test suites to a reasonable time (M7-05).
+          PROPTEST_CASES: "256"
         run: cargo test --locked --all-features --workspace
 
   rustfmt:
