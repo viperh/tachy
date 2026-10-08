@@ -18,6 +18,8 @@ use nucleo_matcher::{
 };
 use tachy_core::{
     column::ColumnMeta,
+    dupes::{DupeMode, DupeSpec},
+    edit::{EditOp, OP_NAMES, parse_ops},
     jobs::MemoryBudget,
     query::{
         self,
@@ -108,6 +110,10 @@ pub enum ArgSpec {
     Goto,
     /// The name of a view in `views.json` (M6-04).
     ViewName,
+    /// `[<col>]: <op> [| <op>]…`, `undo` or `reset` (`tachy_core::edit`).
+    Edit,
+    /// `[<col>, …]`: duplicate keys; none = every column.
+    Columns,
 }
 
 impl ArgSpec {
@@ -124,6 +130,8 @@ impl ArgSpec {
             ArgSpec::Path => "<path>",
             ArgSpec::Goto => "<row|N%|col>",
             ArgSpec::ViewName => "<name>",
+            ArgSpec::Edit => "[<col>]: <op> [| <op>]… | undo | reset",
+            ArgSpec::Columns => "[<col>, …]",
         }
     }
 }
@@ -149,6 +157,12 @@ pub enum CommandKind {
     },
     /// `delete view <name>` (M6-04).
     DeleteView,
+    /// `edit <col>: <ops>` (`tachy_core::edit`).
+    Edit,
+    /// `reset edits`: removes every column edit of the tab.
+    ResetEdits,
+    /// `dupes` / `dedupe` (`tachy_core::dupes`).
+    Dupes(DupeMode),
 }
 
 /// One palette entry.
@@ -173,6 +187,18 @@ pub enum ProfileTarget {
     All,
 }
 
+/// What `edit` does to a column's op chain.
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum EditChange {
+    /// Appends the ops, as validated text (parsed again when it runs: a
+    /// compiled regex has no `PartialEq`).
+    Append(String),
+    /// Removes the last op.
+    Undo,
+    /// Removes every op.
+    Reset,
+}
+
 /// A validated command line, run by `App`.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Invocation {
@@ -194,6 +220,13 @@ pub enum Invocation {
     Goto(GotoTarget),
     /// Removes a view from `views.json` (M6-04).
     DeleteView(String),
+    /// Changes the edits of column `col` (an index into the tab's columns).
+    Edit {
+        col: usize,
+        change: EditChange,
+    },
+    ResetEdits,
+    Dupes(DupeSpec),
 }
 
 /// The palette's bottom line (§12.5).
@@ -249,7 +282,10 @@ impl Command {
     pub fn runs_without_args(&self) -> bool {
         !self.takes_args()
             || self.action.is_some()
-            || matches!(self.kind, CommandKind::Export | CommandKind::View { .. })
+            || matches!(
+                self.kind,
+                CommandKind::Export | CommandKind::View { .. } | CommandKind::Dupes(_)
+            )
     }
 
     /// `sort <col>[:asc|:desc][:ci], …`.
@@ -276,6 +312,13 @@ impl Command {
                     loaded(state)?;
                     return Ok(Invocation::Filter(filter.clone()));
                 }
+                CommandKind::Dupes(mode) => {
+                    loaded(state)?;
+                    return Ok(Invocation::Dupes(DupeSpec {
+                        columns: Vec::new(),
+                        mode: *mode,
+                    }));
+                }
                 _ if self.takes_args() => return Err(format!("usage: {}", self.usage())),
                 _ => {}
             }
@@ -283,6 +326,39 @@ impl Command {
         match &self.kind {
             CommandKind::Action | CommandKind::Export | CommandKind::View { .. } => {
                 Err(format!("{} takes no arguments", self.name))
+            }
+            CommandKind::ResetEdits => {
+                let (_, l) = loaded(state)?;
+                if !trimmed.is_empty() {
+                    return Err(format!("{} takes no arguments", self.name));
+                }
+                if l.source.edits().is_empty() {
+                    return Err("no column is edited".to_owned());
+                }
+                Ok(Invocation::ResetEdits)
+            }
+            CommandKind::Edit => {
+                let (tab, l) = loaded(state)?;
+                let (col, ops) = split_edit(trimmed, tab, &l.columns)?;
+                let field = l.columns[col].source_index;
+                let change = match ops.trim() {
+                    "undo" | "reset" if !l.source.edits().is_edited(field) => {
+                        return Err(format!("{} has no edits", l.columns[col].name.display));
+                    }
+                    "undo" => EditChange::Undo,
+                    "reset" => EditChange::Reset,
+                    text => {
+                        parse_ops(text).map_err(|e| e.message)?;
+                        EditChange::Append(text.to_owned())
+                    }
+                };
+                Ok(Invocation::Edit { col, change })
+            }
+            CommandKind::Dupes(mode) => {
+                let (_, l) = loaded(state)?;
+                DupeSpec::parse(args, *mode, &l.columns)
+                    .map(Invocation::Dupes)
+                    .map_err(|e| e.message)
             }
             CommandKind::Sort => {
                 let (_, l) = loaded(state)?;
@@ -402,6 +478,50 @@ impl Command {
             Invocation::Goto(GotoTarget::Percent(p)) => format!("go to {p}%"),
             Invocation::Goto(GotoTarget::Column(c)) => format!("go to column {}", name(c)),
             Invocation::DeleteView(n) => format!("delete the saved view \"{n}\""),
+            Invocation::ResetEdits => {
+                let n = l.source.edits().fields().count();
+                format!(
+                    "remove the edits of {n} column{}",
+                    if n == 1 { "" } else { "s" }
+                )
+            }
+            Invocation::Edit { col, change } => {
+                let Some(meta) = l.columns.get(col) else {
+                    return Preview::Info(self.description.clone());
+                };
+                let edits = l.source.edits();
+                let field = meta.source_index;
+                let current = edits.describe(field);
+                match change {
+                    EditChange::Undo => {
+                        let mut e = edits.clone();
+                        e.undo(field);
+                        match e.describe(field) {
+                            Some(left) => format!("{}: keep {left}", meta.name.display),
+                            None => format!("{}: remove its only edit", meta.name.display),
+                        }
+                    }
+                    EditChange::Reset => format!(
+                        "{}: remove {}",
+                        meta.name.display,
+                        current.unwrap_or_default()
+                    ),
+                    EditChange::Append(text) => {
+                        let ops = parse_ops(&text).unwrap_or_default();
+                        edit_example(tab, l, col, &ops).map_or_else(
+                            || format!("edit {}", meta.name.display),
+                            |ex| format!("{}: {ex}", meta.name.display),
+                        )
+                    }
+                }
+            }
+            Invocation::Dupes(spec) => {
+                let what = match spec.mode {
+                    DupeMode::Show => "show rows with duplicate",
+                    DupeMode::Remove => "keep the first row of each",
+                };
+                format!("{what} {}: {}", spec.key_text(&l.columns), scan())
+            }
         })
     }
 
@@ -460,6 +580,36 @@ impl Command {
                 (leading_spaces(args), list)
             }
             ArgSpec::Goto => (leading_spaces(args), display_columns(columns)),
+            ArgSpec::Edit => match args.find(':') {
+                // After `<col>:`, the op being typed (after the last `|`).
+                Some(colon) => {
+                    let op_start = args
+                        .rfind('|')
+                        .map_or(colon + 1, |i| (i + 1).max(colon + 1));
+                    let op_start = op_start + leading_spaces(&args[op_start..]);
+                    if args[op_start..].contains(char::is_whitespace) {
+                        (args.len(), Vec::new())
+                    } else {
+                        let mut list = words(OP_NAMES);
+                        if args[colon + 1..op_start].trim().is_empty() {
+                            list.extend(words(&["undo", "reset"]));
+                        }
+                        (op_start, list)
+                    }
+                }
+                None => {
+                    let mut list = display_columns(columns);
+                    for c in &mut list {
+                        c.suffix = ": ";
+                    }
+                    (leading_spaces(args), list)
+                }
+            },
+            ArgSpec::Columns => {
+                let start = args.rfind(',').map_or(0, |i| i + 1);
+                let start = start + leading_spaces(&args[start..]);
+                (start, query_columns(columns))
+            }
             ArgSpec::Path => {
                 let lead = leading_spaces(args);
                 let typed = &args[lead..];
@@ -552,6 +702,34 @@ pub fn registry(extra: &[Command]) -> Vec<Command> {
             ArgSpec::Goto,
             Some(Action::Goto),
             K::Goto,
+        ),
+        Command::new(
+            "edit",
+            "edit a column's values: drop, chop, trim, upper, s/re/rep/, …",
+            ArgSpec::Edit,
+            None,
+            K::Edit,
+        ),
+        Command::new(
+            "reset edits",
+            "remove every column edit",
+            ArgSpec::None,
+            None,
+            K::ResetEdits,
+        ),
+        Command::new(
+            "dupes",
+            "show rows whose columns have duplicate values",
+            ArgSpec::Columns,
+            None,
+            K::Dupes(DupeMode::Show),
+        ),
+        Command::new(
+            "dedupe",
+            "remove duplicate rows, keeping the first of each",
+            ArgSpec::Columns,
+            None,
+            K::Dupes(DupeMode::Remove),
         ),
         Command::new(
             "delete view",
@@ -689,6 +867,58 @@ fn validate_filter(expr: &str, tab: &Tab, l: &Loaded) -> Result<(), String> {
     Ok(())
 }
 
+/// Splits `edit` arguments into the column (an index into `columns`) and
+/// the op text: `<col>: <ops>`, or `: <ops>` for the cursor column. The
+/// longest text before a `:` that is exactly a column name wins, so names
+/// containing `:` work (`a:b: upper`, even next to an `a` column); otherwise
+/// the text before the first `:` is matched with the go-to column rules
+/// (case, prefix).
+fn split_edit<'a>(
+    args: &'a str,
+    tab: &Tab,
+    columns: &[ColumnMeta],
+) -> Result<(usize, &'a str), String> {
+    const USAGE: &str = "usage: edit <col>: <op> [| <op>]… (or undo, reset)";
+    let colons: Vec<usize> = args.match_indices(':').map(|(i, _)| i).collect();
+    let first = *colons.first().ok_or(USAGE)?;
+    let name = args[..first].trim();
+    if name.is_empty() {
+        let col = tab
+            .cursor_source_col()
+            .ok_or("no column under the cursor")?;
+        return Ok((col, &args[first + 1..]));
+    }
+    for &i in colons.iter().rev() {
+        let name = args[..i].trim();
+        if let Some(col) = columns
+            .iter()
+            .position(|c| c.name.display == name || c.name.query == name)
+        {
+            return Ok((col, &args[i + 1..]));
+        }
+    }
+    let col = match_column(name, columns)?;
+    Ok((col, &args[first + 1..]))
+}
+
+/// `"ABC-1001" → "BC-1001"`: the cursor row's value of `col` before and
+/// after `ops` (on top of the column's current edits). `None` when the
+/// cursor row is not on screen or the cell is missing.
+fn edit_example(tab: &Tab, l: &Loaded, col: usize, ops: &[EditOp]) -> Option<String> {
+    let field = l.columns.get(col)?.source_index;
+    let row = tab.cursor_row_data()?;
+    if field >= row.field_count() {
+        return None;
+    }
+    let before = row.display(&l.source, field);
+    if tab.nulls.is_null(before.as_bytes()) {
+        return Some(format!("\"{before}\" (null, unchanged)"));
+    }
+    let after = ops.iter().fold(before.to_owned(), |s, op| op.apply(&s));
+    let shorten = |s: &str| tachy_core::text::truncate_end(&s.escape_debug().to_string(), 40);
+    Some(format!("\"{}\" → \"{}\"", shorten(before), shorten(&after)))
+}
+
 fn open_preview(path: &str) -> Preview {
     let cwd = std::env::current_dir().unwrap_or_default();
     let home = path_complete::home_dir();
@@ -764,9 +994,10 @@ fn path_candidates(typed: &str, cache: &mut CompletionCache) -> Vec<Completion> 
         cache.dir = Some((dir.to_owned(), list));
     }
     let list = cache.dir.as_ref().map_or(&[][..], |(_, l)| l.as_slice());
+    let sep = path_complete::separator_for(typed);
     list.iter()
         .map(|c| Completion {
-            text: c.completed(),
+            text: c.completed(sep),
             suffix: "",
             description: if c.is_dir { "dir" } else { "" }.to_owned(),
         })
@@ -904,9 +1135,12 @@ pub mod tests {
         assert_eq!(all.len(), list.len());
         let names: Vec<&str> = all.iter().map(|(i, _)| list[*i].name.as_str()).collect();
         assert_eq!(
-            &names[..10],
+            &names[..13],
             [
+                "dedupe",
                 "delete view",
+                "dupes",
+                "edit",
                 "filter",
                 "freeze",
                 "goto",
@@ -918,7 +1152,7 @@ pub mod tests {
                 "sort"
             ]
         );
-        let rest = &names[10..];
+        let rest = &names[13..];
         assert!(rest.windows(2).all(|w| w[0] < w[1]), "{rest:?}");
     }
 
@@ -1137,6 +1371,172 @@ pub mod tests {
     }
 
     #[test]
+    fn edit_arguments() {
+        let (_f, mut state) = state_with_tab();
+        let append = |col: usize, ops: &str| {
+            Ok(Invocation::Edit {
+                col,
+                change: EditChange::Append(ops.to_owned()),
+            })
+        };
+        assert_eq!(parse("edit", "name: drop 1", &state), append(0, "drop 1"));
+        assert_eq!(
+            parse("edit", "city:trim | s/a|b/x/g", &state),
+            append(3, "trim | s/a|b/x/g")
+        );
+        // No column: the cursor column.
+        state.tabs[0].cursor_col = 2;
+        assert_eq!(parse("edit", ": upper", &state), append(2, "upper"));
+        // Prefixes and case follow the go-to rules.
+        assert_eq!(parse("edit", "CIT: upper", &state), append(3, "upper"));
+        // Errors: unknown column, bad op, no `:`, nothing to undo.
+        assert!(parse("edit", "nope: upper", &state).is_err());
+        assert!(
+            parse("edit", "name: frob", &state)
+                .unwrap_err()
+                .contains("unknown edit")
+        );
+        assert!(
+            parse("edit", "name upper", &state)
+                .unwrap_err()
+                .starts_with("usage")
+        );
+        assert_eq!(
+            parse("edit", "name: undo", &state),
+            Err("name has no edits".to_owned())
+        );
+        assert!(parse("edit", "", &state).unwrap_err().starts_with("usage"));
+        // With an edit: undo / reset are accepted.
+        state.tabs[0].append_edit(0, "drop 1").unwrap();
+        assert_eq!(
+            parse("edit", "name: undo", &state),
+            Ok(Invocation::Edit {
+                col: 0,
+                change: EditChange::Undo
+            })
+        );
+        assert_eq!(
+            parse("edit", "name:reset", &state),
+            Ok(Invocation::Edit {
+                col: 0,
+                change: EditChange::Reset
+            })
+        );
+    }
+
+    #[test]
+    fn edit_column_names_may_contain_a_colon() {
+        let mut state = empty_state();
+        let (_f, tab) = crate::tab::tests::loaded_tab("a:b,a\n1,2\n3,4\n", 1);
+        state.tabs.push(tab);
+        let names: Vec<String> = state.tabs[0]
+            .loaded
+            .as_ref()
+            .unwrap()
+            .columns
+            .iter()
+            .map(|c| c.name.display.clone())
+            .collect();
+        assert_eq!(names, ["a:b", "a"]);
+        let edit = |col: usize, ops: &str| {
+            Ok(Invocation::Edit {
+                col,
+                change: EditChange::Append(ops.to_owned()),
+            })
+        };
+        assert_eq!(parse("edit", "a:b: upper", &state), edit(0, "upper"));
+        assert_eq!(parse("edit", "a: upper", &state), edit(1, "upper"));
+    }
+
+    #[test]
+    fn edit_preview_shows_the_cursor_value_before_and_after() {
+        let (_f, mut state) = state_with_tab();
+        state.tabs[0].prepare_frame(crate::tab::Viewport {
+            body_height: 10,
+            table_width: 80,
+        });
+        let preview = |state: &AppState, args: &str| cmd("edit").preview(state, args);
+        assert_eq!(
+            preview(&state, "name: drop 1 | upper"),
+            Preview::Info("name: \"Apple\" → \"PPLE\"".to_owned())
+        );
+        assert_eq!(
+            preview(&state, "name: frob"),
+            Preview::Error(
+                "unknown edit \"frob\" (drop, chop, take, slice, trim, upper, lower, title, \
+                 lpad, rpad, prefix, suffix, replace, s/re/rep/)"
+                    .to_owned()
+            )
+        );
+        // On top of the current edits.
+        state.tabs[0].append_edit(0, "drop 1").unwrap();
+        state.tabs[0].prepare_frame(crate::tab::Viewport {
+            body_height: 10,
+            table_width: 80,
+        });
+        assert_eq!(
+            preview(&state, "name: chop 1"),
+            Preview::Info("name: \"pple\" → \"ppl\"".to_owned())
+        );
+        assert_eq!(
+            preview(&state, "name: undo"),
+            Preview::Info("name: remove its only edit".to_owned())
+        );
+        assert_eq!(
+            preview(&state, "name: reset"),
+            Preview::Info("name: remove drop 1".to_owned())
+        );
+    }
+
+    #[test]
+    fn reset_edits_arguments() {
+        let (_f, mut state) = state_with_tab();
+        assert_eq!(
+            parse("reset edits", "", &state),
+            Err("no column is edited".to_owned())
+        );
+        state.tabs[0].append_edit(1, "drop 1").unwrap();
+        state.tabs[0].append_edit(2, "upper").unwrap();
+        assert_eq!(parse("reset edits", "", &state), Ok(Invocation::ResetEdits));
+        assert_eq!(
+            cmd("reset edits").preview(&state, ""),
+            Preview::Info("remove the edits of 2 columns".to_owned())
+        );
+        assert!(
+            parse("reset edits", "x", &state)
+                .unwrap_err()
+                .contains("no arguments")
+        );
+    }
+
+    #[test]
+    fn dupes_arguments() {
+        let (_f, state) = state_with_tab();
+        let spec = |columns: Vec<usize>, mode| Ok(Invocation::Dupes(DupeSpec { columns, mode }));
+        assert_eq!(parse("dupes", "", &state), spec(vec![], DupeMode::Show));
+        assert_eq!(
+            parse("dupes", "city, name", &state),
+            spec(vec![3, 0], DupeMode::Show)
+        );
+        assert_eq!(
+            parse("dedupe", "$2", &state),
+            spec(vec![1], DupeMode::Remove)
+        );
+        assert!(parse("dedupe", "nope", &state).is_err());
+        assert!(cmd("dupes").runs_without_args());
+        assert_eq!(
+            cmd("dupes").preview(&state, "city"),
+            Preview::Info("show rows with duplicate city: full scan of 76 B".to_owned())
+        );
+        assert_eq!(
+            cmd("dedupe").preview(&state, ""),
+            Preview::Info("keep the first row of each all columns: full scan of 76 B".to_owned())
+        );
+        // No file: an error, not a job.
+        assert!(parse("dupes", "", &empty_state()).is_err());
+    }
+
+    #[test]
     fn argument_completions() {
         let (_f, state) = state_with_tab();
         let mut cache = CompletionCache::default();
@@ -1169,5 +1569,36 @@ pub mod tests {
         assert_eq!(texts("set hints", "o", &mut cache).1, ["on", "off"]);
         assert_eq!(texts("profile", "", &mut cache).1[0], "all");
         assert_eq!(texts("freeze", "", &mut cache).1, Vec::<String>::new());
+        // `edit`: columns (with `: `), then op names after the colon, then
+        // nothing while an op's arguments are typed.
+        let (start, list) = cmd("edit").completions(&state, "ci", &mut cache);
+        assert_eq!(start, 0);
+        assert_eq!(
+            list.iter()
+                .map(|c| (c.text.as_str(), c.suffix))
+                .collect::<Vec<_>>(),
+            [("city", ": ")]
+        );
+        assert_eq!(
+            texts("edit", "city: dr", &mut cache),
+            (6, vec!["drop".to_owned()])
+        );
+        assert_eq!(
+            texts("edit", "city: re", &mut cache).1,
+            ["replace", "reset"]
+        );
+        assert_eq!(
+            texts("edit", "city: trim | u", &mut cache),
+            (13, vec!["upper".to_owned()])
+        );
+        assert_eq!(
+            texts("edit", "city: drop 1", &mut cache).1,
+            Vec::<String>::new()
+        );
+        assert_eq!(
+            texts("dupes", "name, c", &mut cache),
+            (6, vec!["city".to_owned()])
+        );
+        assert_eq!(texts("dedupe", "", &mut cache).1.len(), 4);
     }
 }

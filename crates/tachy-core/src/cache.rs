@@ -59,7 +59,8 @@ impl ParsedRow {
         Some(&src.bytes()[s + f.raw.start as usize..s + f.raw.end as usize])
     }
 
-    /// Unescaped value of field `col` (see `RecordParser::field_value`).
+    /// Unescaped value of field `col` (see `RecordParser::field_value`),
+    /// after the source's column edits (`crate::edit`).
     pub fn value<'a>(
         &self,
         src: &'a Source,
@@ -68,14 +69,21 @@ impl ParsedRow {
     ) -> Option<&'a [u8]> {
         let raw = self.raw(src, col)?;
         let p = RecordParser::new(src.dialect());
-        Some(p.unescape(raw, &self.fields[col], scratch))
+        if !src.edits().is_edited(col) {
+            return Some(p.unescape(raw, &self.fields[col], scratch));
+        }
+        let mut unescaped = Vec::new();
+        let v = p.unescape(raw, &self.fields[col], &mut unescaped);
+        src.edits().apply_into(col, v, scratch);
+        Some(scratch)
     }
 
     /// Decoded display string of column `col`, decoded once and kept. A
     /// missing cell (short row) is `""`. Control characters are not escaped
     /// here: the UI runs `parse::display_segments` on the result.
     ///
-    /// `src` must be the source the row was parsed from.
+    /// `src` must be the source the row was parsed from, and the row must be
+    /// re-parsed (`RowCache::invalidate_all`) when its edits change.
     pub fn display(&self, src: &Source, col: usize) -> &str {
         let Some(slot) = self.decoded.get(col) else {
             return "";

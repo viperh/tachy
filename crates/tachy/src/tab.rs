@@ -20,6 +20,7 @@ use tachy_core::{
     cache::{ParsedRow, RowCache},
     column::ColumnMeta,
     dialect::{self, ColumnName, Dialect, DialectOverrides, Encoding, SniffReport},
+    edit::{Edits, parse_ops},
     index::{IndexSummary, RowIndex},
     parse::{RecordParser, decode_field, display_segments, extra_column_name},
     query::Predicate,
@@ -300,8 +301,12 @@ pub struct Loaded {
     pub known_rows: u64,
     /// Ragged rows the cache has seen (`≥ N ragged` while indexing).
     pub ragged_seen: u64,
-    /// The latest type-inference sample (M3-01): phase 1, then phase 2.
+    /// The latest type-inference sample (M3-01): phase 1, then phase 2,
+    /// as seen through the column edits (`SampleResult::with_edits`).
     pub sample: Option<Arc<SampleResult>>,
+    /// The same sample with the unedited values, to recompute `sample`
+    /// when the edits change and to seed phase 2.
+    pub sample_raw: Option<Arc<SampleResult>>,
     /// Cancels the running sample task (a child of the tab's token).
     pub sample_cancel: CancellationToken,
     /// The phase-2 sample was spawned for this generation.
@@ -503,6 +508,7 @@ impl Tab {
             known_rows: 0,
             ragged_seen: 0,
             sample: None,
+            sample_raw: None,
             sample_cancel: self.cancel.child_token(),
             spread_started: false,
             raw_lines: Vec::new(),
@@ -523,6 +529,7 @@ impl Tab {
     /// 4. Rebuilds the column metadata (types and stats cleared) and the
     ///    column layout (order, visibility, widths).
     /// 5. Bumps the generation and creates a fresh `RowIndex`.
+    ///    Column edits are kept when the column count is unchanged.
     /// 6. Drops every view but `All` (filters and sorts are invalid under a
     ///    new dialect), deleting their temp files once their jobs end. The
     ///    caller cancels the tab's jobs.
@@ -537,7 +544,14 @@ impl Tab {
         l.index_cancel.cancel();
         l.sample_cancel.cancel();
         let old = *l.source.dialect();
-        let source = Arc::new(l.source.with_dialect(dialect));
+        let old_edits = l.source.edits().clone();
+        let old_width = l.source.width();
+        let mut source = Arc::new(l.source.with_dialect(dialect));
+        // Column edits survive a reload or a dialect change that keeps the
+        // column count; otherwise their columns no longer exist.
+        if !old_edits.is_empty() && source.width() == old_width {
+            source = Arc::new(source.with_edits(old_edits));
+        }
         if old.quote != dialect.quote || old.escape != dialect.escape {
             l.sniff.quoted_newlines = quoted_newlines(&source, sample_bytes);
         }
@@ -547,6 +561,7 @@ impl Tab {
         l.index_cancel = self.cancel.child_token();
         l.sample_cancel = self.cancel.child_token();
         l.sample = None;
+        l.sample_raw = None;
         l.spread_started = false;
         l.index_summary = None;
         l.index_error = None;
@@ -575,7 +590,7 @@ impl Tab {
             ..ColumnLayout::default()
         };
         for c in &columns {
-            self.layout.push(header_cells(c));
+            self.layout.push(header_cells(c, false));
         }
         if let Some(l) = self.loaded.as_mut() {
             l.columns = columns;
@@ -968,7 +983,8 @@ impl Tab {
             Some(w) => w,
             None => self.screen_width(col),
         };
-        auto_clamp(content, header_cells(meta), self.max_column_width)
+        let edited = l.source.edits().is_edited(meta.source_index);
+        auto_clamp(content, header_cells(meta, edited), self.max_column_width)
     }
 
     /// The widest value of `col` among the prepared rows.
@@ -989,16 +1005,112 @@ impl Tab {
     /// stats and width histograms; then re-measures every column the user
     /// didn't size by hand (M3-04). Phase 2 never overwrites a `set type`
     /// override or a manual width.
+    ///
+    /// `sample` holds unedited values; the column edits are applied to it
+    /// here (`SampleResult::with_edits`).
     pub fn apply_sample(&mut self, sample: Arc<SampleResult>) {
         let Some(l) = self.loaded.as_mut() else {
             return;
         };
-        sample.apply(&mut l.columns, &self.nulls);
-        l.sample = Some(sample);
+        let edits = l.source.edits();
+        let effective = if edits.is_empty() {
+            Arc::clone(&sample)
+        } else {
+            Arc::new(sample.with_edits(edits, &self.nulls, l.source.dialect().encoding))
+        };
+        effective.apply(&mut l.columns, &self.nulls);
+        l.sample = Some(effective);
+        l.sample_raw = Some(sample);
         l.widths_measured = true;
         for col in 0..self.layout.widths.len() {
             self.remeasure(col);
         }
+    }
+
+    /// Replaces the column edits (`tachy_core::edit`): a new `Source` over
+    /// the same mapping, an empty row cache (decoded cells are cached), and
+    /// types, stats and automatic widths recomputed from the sample without
+    /// touching the file. Views stay: they keep the rows they selected.
+    /// `App::apply_edits` also cancels the tab's Profile jobs and a search
+    /// in flight.
+    pub fn set_edits(&mut self, edits: Edits) {
+        let Some(l) = self.loaded.as_mut() else {
+            return;
+        };
+        l.source = Arc::new(l.source.with_edits(edits));
+        l.cache.invalidate_all();
+        l.frame = FrameRows::default();
+        if let Some(raw) = l.sample_raw.clone() {
+            self.apply_sample(raw);
+        } else {
+            for col in 0..self.layout.widths.len() {
+                self.remeasure(col);
+            }
+        }
+    }
+
+    /// The tab's edits, ready to change: a copy of the current ones, set up
+    /// for this file's encoding and null spellings.
+    pub fn edits_to_change(&self) -> Option<Edits> {
+        let l = self.loaded.as_ref()?;
+        let current = l.source.edits();
+        let mut e = Edits::new(l.source.dialect().encoding, self.nulls.clone());
+        for field in current.fields() {
+            e.push(field, current.ops(field).iter().cloned());
+        }
+        Some(e)
+    }
+
+    /// `edit <col>: <ops>`: appends the ops (validated text, see
+    /// `commands::EditChange`) to column `col` (an index into the columns).
+    pub fn append_edit(&mut self, col: usize, ops: &str) -> Result<(), String> {
+        let ops = parse_ops(ops).map_err(|e| e.message)?;
+        let field = self.column_field(col)?;
+        let mut e = self.edits_to_change().ok_or("the file is still opening")?;
+        e.push(field, ops);
+        self.set_edits(e);
+        Ok(())
+    }
+
+    /// `edit <col>: undo` / `reset`. `false` when the column had no edits.
+    pub fn undo_edit(&mut self, col: usize, all: bool) -> Result<bool, String> {
+        let field = self.column_field(col)?;
+        let mut e = self.edits_to_change().ok_or("the file is still opening")?;
+        let changed = if all { e.reset(field) } else { e.undo(field) };
+        if changed {
+            self.set_edits(e);
+        }
+        Ok(changed)
+    }
+
+    /// `reset edits`: removes every edit. `false` when there were none.
+    pub fn reset_edits(&mut self) -> bool {
+        let Some(mut e) = self.edits_to_change() else {
+            return false;
+        };
+        if e.is_empty() {
+            return false;
+        }
+        e.clear();
+        self.set_edits(e);
+        true
+    }
+
+    fn column_field(&self, col: usize) -> Result<usize, String> {
+        let l = self.loaded.as_ref().ok_or("the file is still opening")?;
+        l.columns
+            .get(col)
+            .map(|m| m.source_index)
+            .ok_or_else(|| "no such column".to_owned())
+    }
+
+    /// Whether column `col` (an index into the columns) is edited.
+    pub fn is_edited(&self, col: usize) -> bool {
+        self.loaded.as_ref().is_some_and(|l| {
+            l.columns
+                .get(col)
+                .is_some_and(|m| l.source.edits().is_edited(m.source_index))
+        })
     }
 
     /// `set type <col> <type>` (M3-01; the palette command is M6-02):
@@ -1423,7 +1535,7 @@ impl Tab {
             .loaded
             .as_ref()
             .and_then(|l| l.columns.get(col))
-            .map_or(1, header_cells);
+            .map_or(1, |m| header_cells(m, self.is_edited(col)));
         let widest = u16::try_from(self.screen_width(col)).unwrap_or(u16::MAX);
         self.set_cursor_width(widest.max(header), viewport);
     }
@@ -1539,9 +1651,18 @@ fn columns_for(source: &Source) -> Vec<ColumnMeta> {
 /// Cells the 2-line header of `meta` needs: its name and its type label.
 /// Not clamped to `max_column_width`: headers are never cut by automatic
 /// widths (M3-04).
-pub fn header_cells(meta: &ColumnMeta) -> u16 {
-    let w = text::width(&meta.name.display).max(text::width(meta.ty().label()));
+pub fn header_cells(meta: &ColumnMeta, edited: bool) -> u16 {
+    let w = text::width(&meta.name.display).max(text::width(&type_label(meta, edited)));
     u16::try_from(w).unwrap_or(u16::MAX).max(1)
+}
+
+/// The header's type line: `str`, or `str ✎` for an edited column.
+pub fn type_label(meta: &ColumnMeta, edited: bool) -> String {
+    if edited {
+        format!("{} ✎", meta.ty().label())
+    } else {
+        meta.ty().label().to_owned()
+    }
 }
 
 /// `content` (p95 or screen width) clamped to `[header, max]`; the header
@@ -2132,6 +2253,128 @@ pub mod tests {
         tab.prepare_frame(VP);
         let l = tab.loaded.as_ref().unwrap();
         assert_eq!(l.raw_lines, ["a,\"x", "y\"\r", "1,2"]);
+    }
+
+    /// The phase-1 sample of `tab`'s file, computed on a throwaway runtime.
+    fn head_sample(tab: &Tab) -> Arc<SampleResult> {
+        let src = Arc::clone(&tab.loaded.as_ref().unwrap().source);
+        let rt = tokio::runtime::Builder::new_current_thread()
+            .build()
+            .unwrap();
+        let exec = tachy_core::exec::Executor::with_handle(rt.handle().clone(), 1);
+        let nulls = tab.nulls.clone();
+        Arc::new(
+            rt.block_on(tachy_core::sample::sample_head(
+                src,
+                &exec,
+                nulls,
+                CancellationToken::new(),
+            ))
+            .unwrap(),
+        )
+    }
+
+    fn cell(tab: &mut Tab, row: usize, col: usize) -> String {
+        tab.prepare_frame(VP);
+        let l = tab.loaded.as_ref().unwrap();
+        l.frame.rows[row]
+            .as_ref()
+            .unwrap()
+            .display(&l.source, col)
+            .to_owned()
+    }
+
+    #[test]
+    fn edits_change_cells_and_can_be_undone() {
+        let (_f, mut tab) = loaded_tab("sku,price\nABC-1,$30\nABC-2,$5\n", 1);
+        assert_eq!(cell(&mut tab, 0, 0), "ABC-1");
+        tab.append_edit(0, "drop 1").unwrap();
+        tab.append_edit(0, "lower").unwrap();
+        assert!(tab.is_edited(0) && !tab.is_edited(1));
+        assert_eq!(cell(&mut tab, 0, 0), "bc-1");
+        assert_eq!(cell(&mut tab, 1, 0), "bc-2");
+        let l = tab.loaded.as_ref().unwrap();
+        assert_eq!(
+            l.source.edits().describe(0).as_deref(),
+            Some("drop 1 | lower")
+        );
+        // Undo pops the last op; reset removes the rest.
+        assert_eq!(tab.undo_edit(0, false), Ok(true));
+        assert_eq!(cell(&mut tab, 0, 0), "BC-1");
+        assert_eq!(tab.undo_edit(0, true), Ok(true));
+        assert_eq!(cell(&mut tab, 0, 0), "ABC-1");
+        assert_eq!(tab.undo_edit(0, true), Ok(false));
+        assert!(!tab.is_edited(0));
+        // Errors.
+        assert!(
+            tab.append_edit(0, "frob")
+                .unwrap_err()
+                .contains("unknown edit")
+        );
+        assert_eq!(
+            tab.append_edit(9, "upper"),
+            Err("no such column".to_owned())
+        );
+        // `reset edits`.
+        tab.append_edit(0, "upper").unwrap();
+        tab.append_edit(1, "drop 1").unwrap();
+        assert!(tab.reset_edits());
+        assert!(!tab.reset_edits());
+        assert_eq!(cell(&mut tab, 0, 1), "$30");
+    }
+
+    #[test]
+    fn edits_reinfer_types_and_widths_from_the_sample() {
+        let (_f, mut tab) = loaded_tab("sku,price\nABC-1,$30\nABC-2,$5\n", 1);
+        let sample = head_sample(&tab);
+        tab.apply_sample(sample);
+        let ty = |tab: &Tab| tab.loaded.as_ref().unwrap().columns[1].ty();
+        assert_eq!(ty(&tab), ColType::Str);
+        tab.append_edit(1, "drop 1").unwrap();
+        assert_eq!(ty(&tab), ColType::I64, "`$30` → `30`");
+        // The raw sample is kept, so undoing restores the inferred type.
+        assert!(tab.loaded.as_ref().unwrap().sample_raw.is_some());
+        tab.undo_edit(1, false).unwrap();
+        assert_eq!(ty(&tab), ColType::Str);
+        // Phase 2 seeds from the raw sample even while edits are set.
+        tab.append_edit(1, "drop 1").unwrap();
+        let l = tab.loaded.as_ref().unwrap();
+        assert_eq!(
+            l.sample_raw.as_ref().unwrap().per_column[1].values.get(0),
+            Some(&b"$30"[..])
+        );
+        assert_eq!(
+            l.sample.as_ref().unwrap().per_column[1].values.get(0),
+            Some(&b"30"[..])
+        );
+    }
+
+    #[test]
+    fn edited_headers_get_a_marker_and_room_for_it() {
+        let (_f, mut tab) = loaded_tab("id,x\n1,2\n", 1);
+        let meta = tab.loaded.as_ref().unwrap().columns[0].clone();
+        assert_eq!(type_label(&meta, false), "str");
+        assert_eq!(type_label(&meta, true), "str ✎");
+        assert_eq!(header_cells(&meta, false), 3);
+        assert_eq!(header_cells(&meta, true), 5);
+        tab.append_edit(0, "prefix #").unwrap();
+        assert!(tab.auto_width(0) >= 5);
+    }
+
+    #[test]
+    fn edits_survive_a_reload_with_the_same_columns() {
+        let (_f, mut tab) = loaded_tab("a,b\nx,y\n", 1);
+        tab.append_edit(1, "upper").unwrap();
+        let d = *tab.loaded.as_ref().unwrap().source.dialect();
+        tab.apply_dialect(d, 65_536);
+        assert!(tab.is_edited(1));
+        // A dialect that changes the column count drops them.
+        let mut one_col = d;
+        one_col.delimiter = b';';
+        tab.apply_dialect(one_col, 65_536);
+        let l = tab.loaded.as_ref().unwrap();
+        assert_eq!(l.columns.len(), 1);
+        assert!(l.source.edits().is_empty());
     }
 
     #[test]

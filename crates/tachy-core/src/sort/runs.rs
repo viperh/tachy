@@ -90,7 +90,7 @@ pub(crate) fn extract_chunk(
     let mut ex = Extractor::new(ctx, ctl, count as usize);
     match parent {
         View::All => ex.range(first, count)?,
-        View::Filtered { .. } => {
+        View::Filtered { .. } | View::Dupes { .. } => {
             let ids = parent.row_ids(first, count as usize);
             ex.ids(&ids)?;
         }
@@ -109,6 +109,8 @@ struct Extractor<'a> {
     parser: RecordParser,
     rec: RecordRanges,
     scratch: Vec<u8>,
+    /// Edited value (`crate::edit`).
+    edited: Vec<u8>,
     text: String,
     since_check: u64,
     out: Vec<SortRecord>,
@@ -122,6 +124,7 @@ impl<'a> Extractor<'a> {
             parser: RecordParser::new(ctx.src.dialect()),
             rec: RecordRanges::default(),
             scratch: Vec::new(),
+            edited: Vec::new(),
             text: String::new(),
             since_check: 0,
             out: Vec::with_capacity(capacity),
@@ -148,8 +151,10 @@ impl<'a> Extractor<'a> {
         };
         let spec = &self.ctx.keys[0];
         let v = (spec.field < self.rec.fields.len()).then(|| {
-            self.parser
-                .field_value(bytes, &self.rec, spec.field, &mut self.scratch)
+            let v = self
+                .parser
+                .field_value(bytes, &self.rec, spec.field, &mut self.scratch);
+            self.ctx.src.edits().apply(spec.field, v, &mut self.edited)
         });
         let prefix = encode_key(spec, v, &self.ctx.nulls, self.ctx.enc, &mut self.text);
         self.out.push(SortRecord { prefix, row_id });

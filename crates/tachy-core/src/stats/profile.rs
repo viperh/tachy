@@ -179,6 +179,7 @@ fn profile_chunk(
     let mut parser = RecordParser::new(src.dialect());
     let mut rec = RecordRanges::default();
     let mut scratch = Vec::new();
+    let mut edited = Vec::new();
     let mut ticker = Ticker::new(ctl);
     let mut pos = range.start;
     let mut unreported = 0u64;
@@ -190,6 +191,7 @@ fn profile_chunk(
         for (c, s) in cols.iter().zip(stats.iter_mut()) {
             if c.field < rec.fields.len() {
                 let v = parser.field_value(bytes, &rec, c.field, &mut scratch);
+                let v = src.edits().apply(c.field, v, &mut edited);
                 let parsed = parse_value(c.ty, v, nulls);
                 s.push(v, &parsed);
             } else {

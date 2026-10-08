@@ -48,6 +48,7 @@ use super::{
 use crate::{
     column::ColumnMeta,
     dialect::{Dialect, Encoding, EscapeStyle},
+    edit::Edits,
     types::{ColType, NullSet, parse_bool, parse_date, parse_datetime, parse_f64, parse_i64},
 };
 
@@ -65,6 +66,19 @@ pub fn compile(
     dialect: &Dialect,
     nulls: &NullSet,
 ) -> Result<Predicate, QueryError> {
+    compile_with_edits(expr, cols, dialect, nulls, &Arc::default())
+}
+
+/// [`compile()`] for a source with column edits (`crate::edit`): edited
+/// fields are compared after their edits, and never feed the raw-bytes
+/// pre-filter literal ([`Predicate::required_literal`]).
+pub fn compile_with_edits(
+    expr: &ResolvedExpr,
+    cols: &[ColumnMeta],
+    dialect: &Dialect,
+    nulls: &NullSet,
+    edits: &Arc<Edits>,
+) -> Result<Predicate, QueryError> {
     let mut c = Compiler {
         cols,
         enc: dialect.encoding,
@@ -79,6 +93,8 @@ pub fn compile(
     let mut fields: Vec<usize> = columns.iter().map(|&i| cols[i].source_index).collect();
     fields.sort_unstable();
     fields.dedup();
+    // An edited value is not in the raw bytes.
+    let required_literal = required_literal.filter(|_| !fields.iter().any(|&f| edits.is_edited(f)));
     Ok(Predicate {
         inner: Arc::new(Inner {
             root,
@@ -87,6 +103,7 @@ pub fn compile(
                 backslash: dialect.escape == EscapeStyle::Backslash,
                 nulls: nulls.clone(),
                 encoding: dialect.encoding,
+                edits: Arc::clone(edits),
             },
             columns,
             fields,

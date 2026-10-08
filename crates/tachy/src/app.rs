@@ -619,7 +619,8 @@ impl App {
         let Some(l) = tab.loaded.as_mut() else {
             return;
         };
-        let Some(head) = l.sample.clone() else {
+        // Phase 2 extends the unedited head sample.
+        let Some(head) = l.sample_raw.clone() else {
             return;
         };
         if l.spread_started

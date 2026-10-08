@@ -40,9 +40,10 @@ impl PartialEq for LineEdit {
 impl Eq for LineEdit {}
 
 /// Characters that end a word for `ctrl-w` / `alt-backspace`: whitespace and
-/// `/` (so a path loses one component at a time).
+/// path separators (`/`, and `\` on Windows), so a path loses one component
+/// at a time.
 fn is_word_separator(c: char) -> bool {
-    c.is_whitespace() || c == '/'
+    c.is_whitespace() || crate::path_complete::is_separator(c)
 }
 
 impl LineEdit {
@@ -296,6 +297,18 @@ mod tests {
         assert_eq!(i.cursor(), 7);
     }
 
+    #[test]
+    fn word_deletion_stops_at_backslashes_on_windows_only() {
+        let mut i = LineInput::default();
+        i.set("data\\sub\\orders.csv");
+        i.handle_key(ctrl('w'));
+        if cfg!(windows) {
+            assert_eq!(i.text(), "data\\sub\\");
+        } else {
+            // A file-name character on Unix: the whole word goes.
+            assert_eq!(i.text(), "");
+        }
+    }
     #[test]
     fn alt_backspace_deletes_the_previous_word() {
         let mut i = LineEdit::with_text("price > 10  ");

@@ -24,7 +24,7 @@ use super::{Component, put};
 use crate::{
     search_ui::{SearchState, cell_highlights},
     state::AppState,
-    tab::{ColSlot, HLayout, Loaded, Phase, Tab, Viewport},
+    tab::{ColSlot, HLayout, Loaded, Phase, Tab, Viewport, type_label},
     theme::Theme,
 };
 
@@ -185,7 +185,12 @@ impl DrawCtx<'_> {
                     put(buf, x, y1, &fitted.render(), surface.patch(name_style));
                 }
             }
-            let ty = text::fit(meta.ty().label(), slot.width, align).render();
+            // `str ✎`: the column has edits (`tachy_core::edit`).
+            let label = type_label(
+                meta,
+                self.loaded.source.edits().is_edited(meta.source_index),
+            );
+            let ty = text::fit(&label, slot.width, align).render();
             put(buf, x, y2, &ty, surface.patch(theme.header_type()));
         }
         if self.h.more_cols > 0 {

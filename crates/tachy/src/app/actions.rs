@@ -8,6 +8,7 @@ use tachy_core::{size::format_count, types::ColType};
 use super::{App, now};
 use crate::{
     action::Action,
+    commands::EditChange,
     components::{
         dialogs::{
             column_chooser::ColumnChooserState,
@@ -477,6 +478,58 @@ impl App {
         }
         self.dirty = true;
         done
+    }
+}
+
+// ---- column edits ----------------------------------------------------------
+
+impl App {
+    /// `edit <col>: …` on the active tab (`Tab::append_edit` /
+    /// `Tab::undo_edit`).
+    pub(super) fn edit_column(&mut self, col: usize, change: EditChange) -> Result<(), String> {
+        let tab = self.state.active_tab_mut().ok_or("no file open")?;
+        match change {
+            EditChange::Append(ops) => tab.append_edit(col, &ops)?,
+            EditChange::Undo => {
+                tab.undo_edit(col, false)?;
+            }
+            EditChange::Reset => {
+                tab.undo_edit(col, true)?;
+            }
+        }
+        self.edits_changed();
+        Ok(())
+    }
+
+    /// `reset edits` on the active tab.
+    pub(super) fn reset_edits(&mut self) {
+        if self
+            .state
+            .active_tab_mut()
+            .is_some_and(|tab| tab.reset_edits())
+        {
+            self.edits_changed();
+        }
+    }
+
+    /// After the active tab's edits changed: its Profile jobs were computing
+    /// stats of the old values, and a search in flight matched them.
+    fn edits_changed(&mut self) {
+        let Some(id) = self.state.active_tab().map(|t| t.id) else {
+            return;
+        };
+        let profiles: Vec<_> = self
+            .state
+            .jobs
+            .iter()
+            .filter(|j| j.tab == id && j.kind == tachy_core::jobs::JobKind::Profile)
+            .map(|j| j.id)
+            .collect();
+        for job in profiles {
+            self.state.jobs.cancel(job);
+        }
+        self.forget_search(id);
+        self.dirty = true;
     }
 }
 

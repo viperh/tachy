@@ -32,6 +32,7 @@ use crate::{
     Error,
     column::{ColumnMeta, WidthHistogram},
     dialect::Encoding,
+    edit::Edits,
     exec::Executor,
     index::RowIndex,
     parse::{ParseOutcome, RecordParser, RecordRanges, decode_field},
@@ -172,12 +173,69 @@ impl SampleResult {
         }
     }
 
+    /// The sample as seen through column edits (`crate::edit`): each
+    /// edited column's values are edited, and its type, stats and widths
+    /// are computed again from them. **No file access**. `self` must hold
+    /// the unedited values (the sample tasks never apply edits), so a later
+    /// edit change starts from the original values again.
+    pub fn with_edits(&self, edits: &Edits, nulls: &NullSet, enc: Encoding) -> SampleResult {
+        let per_column = self
+            .per_column
+            .iter()
+            .enumerate()
+            .map(|(field, c)| {
+                if !edits.is_edited(field) {
+                    return c.clone();
+                }
+                let mut values = SampleValues::default();
+                let mut out = Vec::new();
+                for v in c.values.iter() {
+                    values.push(edits.apply_opt(field, v, &mut out));
+                }
+                column_sample(values, nulls, enc)
+            })
+            .collect();
+        SampleResult {
+            phase: self.phase,
+            rows_sampled: self.rows_sampled,
+            head_rows: self.head_rows,
+            reached_eof: self.reached_eof,
+            per_column,
+        }
+    }
+
     /// Bytes held by the cached sample values.
     pub fn memory_bytes(&self) -> usize {
         self.per_column
             .iter()
             .map(|c| c.values.memory_bytes())
             .sum()
+    }
+}
+
+/// Type, stats and widths of one column's sampled values.
+fn column_sample(values: SampleValues, nulls: &NullSet, enc: Encoding) -> ColumnSample {
+    let mut inference = TypeInference::new();
+    let mut widths = WidthHistogram::default();
+    for v in values.iter() {
+        match v {
+            Some(v) => {
+                inference.push(v, nulls);
+                widths.push(if nulls.is_null(v) {
+                    0
+                } else {
+                    decode_field(v, enc).width()
+                });
+            }
+            None => widths.push(0),
+        }
+    }
+    let inferred = inference.infer();
+    ColumnSample {
+        inferred,
+        stats: stats_from_values(&values, inferred, nulls),
+        widths,
+        values,
     }
 }
 
@@ -263,30 +321,7 @@ impl Collector {
         let per_column = self
             .cols
             .into_iter()
-            .map(|values| {
-                let mut inference = TypeInference::new();
-                let mut widths = WidthHistogram::default();
-                for v in values.iter() {
-                    match v {
-                        Some(v) => {
-                            inference.push(v, nulls);
-                            widths.push(if nulls.is_null(v) {
-                                0
-                            } else {
-                                decode_field(v, enc).width()
-                            });
-                        }
-                        None => widths.push(0),
-                    }
-                }
-                let inferred = inference.infer();
-                ColumnSample {
-                    inferred,
-                    stats: stats_from_values(&values, inferred, nulls),
-                    widths,
-                    values,
-                }
-            })
+            .map(|values| column_sample(values, nulls, enc))
             .collect();
         SampleResult {
             phase,

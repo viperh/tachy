@@ -10,10 +10,10 @@
 //!
 //! # Rules (§10.3)
 //!
-//! - At most **one Sort**, **one Export** and **one Profile** running (or
-//!   paused) per tab. Extra ones stay `Queued` and start in FIFO order when
-//!   the slot frees. Profile is not in the spec: one at a time protects the
-//!   budget.
+//! - At most **one Sort**, **one Export**, **one Profile** and **one Dupes**
+//!   running (or paused) per tab. Extra ones stay `Queued` and start in FIFO
+//!   order when the slot frees. Profile and Dupes are not in the spec: one
+//!   at a time protects the budget.
 //! - A new Filter cancels the running (or queued) filters that read the
 //!   **same parent view** of the same tab, and no others.
 //! - A job whose minimum budget isn't free stays `Queued` until a running job
@@ -48,6 +48,7 @@ use std::{
 };
 
 use tachy_core::{
+    dupes::{DupeResult, DupeSpec},
     exec::Executor,
     jobs::{
         BudgetRequest, JobControl, JobError, JobKind, JobState, MemoryBudget, PauseToken, Progress,
@@ -94,6 +95,13 @@ pub enum JobOutput {
     ProfileDone(ProfileResult),
     /// The export's final path and data rows (M6-01).
     ExportDone { path: PathBuf, rows: u64 },
+    /// The rows selected by `dupes` / `dedupe`, and the parent's sort keys
+    /// (an `Ordered` parent keeps its order): pushed as a duplicates view.
+    DupesDone {
+        result: DupeResult,
+        spec: DupeSpec,
+        keys: Vec<SortKey>,
+    },
 }
 
 impl fmt::Debug for JobOutput {
@@ -113,6 +121,12 @@ impl fmt::Debug for JobOutput {
                 .debug_struct("ExportDone")
                 .field("path", path)
                 .field("rows", rows)
+                .finish(),
+            JobOutput::DupesDone { result, spec, .. } => f
+                .debug_struct("DupesDone")
+                .field("rows", &result.rows.len())
+                .field("groups", &result.groups)
+                .field("mode", &spec.mode)
                 .finish(),
         }
     }
@@ -450,7 +464,7 @@ impl JobManager {
     /// Whether `j` may leave the queue now (slots only, not the budget).
     fn slot_free(&self, j: &JobHandle) -> bool {
         match j.kind {
-            JobKind::Sort | JobKind::Export | JobKind::Profile => !self
+            JobKind::Sort | JobKind::Export | JobKind::Profile | JobKind::Dupes => !self
                 .jobs
                 .iter()
                 .any(|o| o.id != j.id && o.tab == j.tab && o.kind == j.kind && o.is_active()),

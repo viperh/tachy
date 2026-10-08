@@ -10,6 +10,8 @@
 //!   output encoding is the source encoding (UTF-8 for a transcoded UTF-16
 //!   source, Windows-1252 bytes for a Windows-1252 source). A UTF-8 byte
 //!   order mark in the source is **not** written.
+//! - Edited columns (`crate::edit`) are written **after** their edits, in
+//!   the source encoding; the other columns keep their raw bytes.
 //! - Quoting always uses `"` with doubled-quote escaping, whatever the
 //!   source dialect (a backslash-escaped or single-quoted source is
 //!   normalised). See [`format_record`] for when fields are quoted.
@@ -384,18 +386,26 @@ struct Fmt {
 }
 
 impl Fmt {
-    /// Appends the current record's selected fields and `\n`.
+    /// Appends the current record's selected fields (after their column
+    /// edits, `crate::edit`) and `\n`. `scratch` holds the unescaped and the
+    /// edited value.
     fn record(
         &self,
         parser: &RecordParser,
         rec: &RecordRanges,
-        scratch: &mut Vec<u8>,
+        scratch: &mut (Vec<u8>, Vec<u8>),
         out: &mut Vec<u8>,
     ) {
         let bytes = self.src.bytes();
+        let edits = self.src.edits();
+        let (scratch, edited) = scratch;
         if let [field] = self.fields[..] {
             let v = if field < rec.fields.len() {
-                parser.field_value(bytes, rec, field, scratch)
+                edits.apply(
+                    field,
+                    parser.field_value(bytes, rec, field, scratch),
+                    edited,
+                )
             } else {
                 &[]
             };
@@ -407,6 +417,7 @@ impl Fmt {
                 }
                 if field < rec.fields.len() {
                     let v = parser.field_value(bytes, rec, field, scratch);
+                    let v = edits.apply(field, v, edited);
                     push_field(v, self.delim, self.quoting, out);
                 } else if self.quoting == Quoting::All {
                     out.extend_from_slice(b"\"\"");
@@ -420,7 +431,7 @@ impl Fmt {
         let bytes = self.src.bytes();
         let mut parser = RecordParser::new(self.src.dialect());
         let mut rec = RecordRanges::default();
-        let mut scratch = Vec::new();
+        let mut scratch = Default::default();
         let mut ticker = Ticker::new(ctl);
         let mut out = Vec::with_capacity((r.end - r.start) as usize + 1024);
         let mut pos = r.start;
@@ -442,7 +453,7 @@ impl Fmt {
         let ids = self.view.row_ids(first, count as usize);
         let mut seeker = RowSeeker::new(&self.src);
         let mut rec = RecordRanges::default();
-        let mut scratch = Vec::new();
+        let mut scratch = Default::default();
         let mut ticker = Ticker::new(ctl);
         let mut out = Vec::new();
         let mut rows = 0;

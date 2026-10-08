@@ -5,6 +5,7 @@
 use std::sync::{Arc, atomic::Ordering};
 
 use tachy_core::{
+    dupes::DupeRows,
     jobs::{JobError, JobKind, Progress},
     view::{OrderedKind, View},
 };
@@ -93,6 +94,21 @@ impl App {
                     },
                     None,
                 );
+            }
+            Ok(JobOutput::DupesDone { result, spec, keys }) => {
+                let text = result.summary(spec.mode);
+                let tab = &mut self.state.tabs[idx];
+                let view = match result.rows {
+                    DupeRows::Rows(rows) => View::Dupes { rows, spec },
+                    DupeRows::List(list) => View::Ordered {
+                        list,
+                        kind: OrderedKind::Dupes { spec, keys },
+                    },
+                };
+                tab.push_view(view, None);
+                self.state
+                    .toasts
+                    .push(Toast::new(ToastLevel::Info, text), now());
             }
             Ok(JobOutput::ProfileDone(profile)) => {
                 if let Some(l) = self.state.tabs[idx].loaded.as_mut() {

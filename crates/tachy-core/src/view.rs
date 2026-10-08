@@ -28,7 +28,11 @@ use memmap2::Mmap;
 use roaring::RoaringTreemap;
 use tempfile::NamedTempFile;
 
-use crate::{index::RowIndex, sort::SortKey};
+use crate::{
+    dupes::{DupeMode, DupeSpec},
+    index::RowIndex,
+    sort::SortKey,
+};
 
 /// What an [`View::Ordered`] view holds.
 #[derive(Clone, Debug, PartialEq, Eq)]
@@ -44,6 +48,13 @@ pub enum OrderedKind {
         expr: String,
         /// Columns referenced by the filter (header highlighting).
         columns: Vec<usize>,
+        /// The parent's sort keys.
+        keys: Vec<SortKey>,
+    },
+    /// `dupes` / `dedupe` over a sorted view, in the parent's order.
+    Dupes {
+        /// The key and mode.
+        spec: DupeSpec,
         /// The parent's sort keys.
         keys: Vec<SortKey>,
     },
@@ -63,6 +74,14 @@ pub enum View {
         /// Columns referenced by the filter (header highlighting).
         columns: Vec<usize>,
     },
+    /// The rows selected by `dupes` / `dedupe` (`crate::dupes`), in file
+    /// order.
+    Dupes {
+        /// The selected row ids.
+        rows: Arc<FilterRows>,
+        /// The key and mode.
+        spec: DupeSpec,
+    },
     /// Rows in the order of a permutation file.
     Ordered {
         /// The row ids, in view order.
@@ -78,7 +97,7 @@ impl View {
     pub fn len(&self, index: &RowIndex) -> u64 {
         match self {
             View::All => index.indexed_rows(),
-            View::Filtered { rows, .. } => rows.len(),
+            View::Filtered { rows, .. } | View::Dupes { rows, .. } => rows.len(),
             View::Ordered { list, .. } => list.len(),
         }
     }
@@ -93,7 +112,7 @@ impl View {
     pub fn is_growing(&self, index: &RowIndex) -> bool {
         match self {
             View::All => !index.is_complete(),
-            View::Filtered { rows, .. } => rows.is_growing(),
+            View::Filtered { rows, .. } | View::Dupes { rows, .. } => rows.is_growing(),
             View::Ordered { list, .. } => list.is_growing(),
         }
     }
@@ -104,7 +123,7 @@ impl View {
     pub fn row_id_at(&self, pos: u64) -> Option<u64> {
         match self {
             View::All => Some(pos),
-            View::Filtered { rows, .. } => rows.row_id_at(pos),
+            View::Filtered { rows, .. } | View::Dupes { rows, .. } => rows.row_id_at(pos),
             View::Ordered { list, .. } => list.get(pos),
         }
     }
@@ -116,7 +135,7 @@ impl View {
     pub fn row_ids(&self, first: u64, count: usize) -> Vec<u64> {
         match self {
             View::All => (first..first.saturating_add(count as u64)).collect(),
-            View::Filtered { rows, .. } => rows.row_ids(first, count),
+            View::Filtered { rows, .. } | View::Dupes { rows, .. } => rows.row_ids(first, count),
             View::Ordered { list, .. } => list.read(first, count),
         }
     }
@@ -128,14 +147,21 @@ impl View {
     pub fn position_of(&self, row_id: u64) -> Option<u64> {
         match self {
             View::All => Some(row_id),
-            View::Filtered { rows, .. } => rows.position_of(row_id),
+            View::Filtered { rows, .. } | View::Dupes { rows, .. } => rows.position_of(row_id),
             View::Ordered { .. } => None,
         }
     }
 
     /// The top-bar label (§8.1): `all rows`, `filtered` or `sorted`. A filter
-    /// over a sorted view is `filtered` (D10).
+    /// over a sorted view is `filtered` (D10). `dupes` views are
+    /// `duplicates`, `dedupe` views `deduplicated`, over sorted views too.
     pub fn label(&self) -> &'static str {
+        if let Some(spec) = self.dupe_spec() {
+            return match spec.mode {
+                DupeMode::Show => "duplicates",
+                DupeMode::Remove => "deduplicated",
+            };
+        }
         match self {
             View::All => "all rows",
             View::Filtered { .. }
@@ -147,6 +173,23 @@ impl View {
                 kind: OrderedKind::Sorted { .. },
                 ..
             } => "sorted",
+            View::Dupes { .. }
+            | View::Ordered {
+                kind: OrderedKind::Dupes { .. },
+                ..
+            } => unreachable!("handled above"),
+        }
+    }
+
+    /// The `dupes` / `dedupe` spec of a duplicates view.
+    pub fn dupe_spec(&self) -> Option<&DupeSpec> {
+        match self {
+            View::Dupes { spec, .. }
+            | View::Ordered {
+                kind: OrderedKind::Dupes { spec, .. },
+                ..
+            } => Some(spec),
+            _ => None,
         }
     }
 
@@ -155,16 +198,22 @@ impl View {
     pub fn sort_keys(&self) -> &[SortKey] {
         match self {
             View::Ordered {
-                kind: OrderedKind::Sorted { keys } | OrderedKind::FilteredSorted { keys, .. },
+                kind:
+                    OrderedKind::Sorted { keys }
+                    | OrderedKind::FilteredSorted { keys, .. }
+                    | OrderedKind::Dupes { keys, .. },
                 ..
             } => keys,
             _ => &[],
         }
     }
 
-    /// Columns referenced by the view's filter (header highlighting, §12.4);
-    /// empty for `All` and plain sorts.
+    /// Columns referenced by the view's filter (header highlighting, §12.4),
+    /// or a duplicates view's key columns; empty for `All` and plain sorts.
     pub fn filter_columns(&self) -> &[usize] {
+        if let Some(spec) = self.dupe_spec() {
+            return &spec.columns;
+        }
         match self {
             View::Filtered { columns, .. }
             | View::Ordered {
@@ -598,6 +647,51 @@ mod tests {
         assert_eq!(v.label(), "filtered");
         assert_eq!(v.filter_columns(), &[2]);
         assert_eq!(v.row_ids(0, 5), vec![5, 1]);
+    }
+
+    #[test]
+    fn dupes_views() {
+        let rows = Arc::new(FilterRows::from_bitmap(RoaringTreemap::from_iter([
+            1u64, 4, 6,
+        ])));
+        let spec = DupeSpec {
+            columns: vec![2, 0],
+            mode: DupeMode::Show,
+        };
+        let v = View::Dupes {
+            rows,
+            spec: spec.clone(),
+        };
+        let index = RowIndex::new(0);
+        assert_eq!(v.len(&index), 3);
+        assert_eq!(v.row_ids(1, 5), vec![4, 6]);
+        assert_eq!(v.row_id_at(0), Some(1));
+        assert_eq!(v.position_of(6), Some(2));
+        assert_eq!(v.label(), "duplicates");
+        assert_eq!(v.filter_columns(), &[2, 0], "key columns are highlighted");
+        assert_eq!(v.filter_expr(), None);
+        assert_eq!(v.dupe_spec(), Some(&spec));
+        assert!(v.sort_keys().is_empty() && !v.is_growing(&index));
+
+        // Over a sorted parent: the parent's keys and order stay.
+        let dir = tempfile::tempdir().unwrap();
+        let list = RowIdList::from_ids(dir.path(), &[6, 1]).unwrap();
+        let keys = vec![SortKey::desc(1)];
+        let v = View::Ordered {
+            list,
+            kind: OrderedKind::Dupes {
+                spec: DupeSpec {
+                    columns: vec![],
+                    mode: DupeMode::Remove,
+                },
+                keys: keys.clone(),
+            },
+        };
+        assert_eq!(v.label(), "deduplicated");
+        assert_eq!(v.sort_keys(), keys.as_slice());
+        assert!(v.filter_columns().is_empty());
+        assert_eq!(v.row_ids(0, 5), vec![6, 1]);
+        assert!(View::All.dupe_spec().is_none());
     }
 
     #[test]

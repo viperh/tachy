@@ -470,8 +470,9 @@ impl ExportForm {
         match path_complete::complete(input, candidates) {
             Some(c) if c.input != input || c.cycle.is_some() => {
                 if let Some(cycle) = &c.cycle {
+                    let sep = path_complete::separator_for(input);
                     let names: Vec<String> =
-                        cycle.matches.iter().map(Candidate::completed).collect();
+                        cycle.matches.iter().map(|m| m.completed(sep)).collect();
                     self.note = Some(format!("{count} matches: {}", names.join("  ")));
                 }
                 self.path.set(c.input);

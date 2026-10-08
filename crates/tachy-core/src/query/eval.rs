@@ -28,6 +28,7 @@ use memchr::memmem::Finder;
 use super::ast::CmpOp;
 use crate::{
     dialect::Encoding,
+    edit::Edits,
     parse::{FieldRange, RecordRanges, decode_field, field_bytes},
     types::{
         ColType, NullSet, Value, parse_bool, parse_date, parse_datetime, parse_f64, parse_i64,
@@ -40,6 +41,9 @@ use crate::{
 pub struct EvalScratch {
     a: Vec<u8>,
     b: Vec<u8>,
+    /// Edited values (`crate::edit`) of `a` and `b`.
+    ea: Vec<u8>,
+    eb: Vec<u8>,
     lower: Vec<u8>,
     text: String,
 }
@@ -157,6 +161,8 @@ pub(crate) struct Ctx {
     pub(crate) backslash: bool,
     pub(crate) nulls: NullSet,
     pub(crate) encoding: Encoding,
+    /// Column edits: fields are compared after them.
+    pub(crate) edits: Arc<Edits>,
 }
 
 impl Predicate {
@@ -415,8 +421,8 @@ fn cmp_f64(a: f64, b: f64) -> Ordering {
     a.partial_cmp(&b).unwrap_or(Ordering::Equal)
 }
 
-/// The value of field `i`, unescaped into `buf` if needed. `None` when the
-/// record has no such field.
+/// The value of field `i`, unescaped into `buf` if needed, then edited into
+/// `ebuf` if the field has edits. `None` when the record has no such field.
 #[inline]
 fn field<'a>(
     ctx: &Ctx,
@@ -424,13 +430,15 @@ fn field<'a>(
     fields: &[FieldRange],
     i: usize,
     buf: &'a mut Vec<u8>,
+    ebuf: &'a mut Vec<u8>,
 ) -> Option<&'a [u8]> {
     let f = fields.get(i)?;
     let raw = rec.get(f.raw.start as usize..f.raw.end as usize)?;
-    Some(match ctx.quote {
+    let v = match ctx.quote {
         Some(q) if f.quoted => field_bytes(raw, f, q, ctx.backslash, buf),
         _ => raw,
-    })
+    };
+    Some(ctx.edits.apply(i, v, ebuf))
 }
 
 /// Unicode lowercase of `v` (decoded with `enc`) into `out`.
@@ -457,7 +465,8 @@ fn eval_node(
             (eval_node(a, ctx, rec, fields, s) == eval_node(b, ctx, rec, fields, s)) != *negate
         }
         Node::IsNull { field: i, negated } => {
-            let null = field(ctx, rec, fields, *i, &mut s.a).is_none_or(|v| ctx.nulls.is_null(v));
+            let null = field(ctx, rec, fields, *i, &mut s.a, &mut s.ea)
+                .is_none_or(|v| ctx.nulls.is_null(v));
             null != *negated
         }
         Node::Field {
@@ -465,18 +474,20 @@ fn eval_node(
             test,
             on_null,
         } => {
-            let EvalScratch { a, lower, text, .. } = s;
-            match field(ctx, rec, fields, *i, a) {
+            let EvalScratch {
+                a, ea, lower, text, ..
+            } = s;
+            match field(ctx, rec, fields, *i, a, ea) {
                 Some(v) if !ctx.nulls.is_null(v) => test.eval(v, ctx.encoding, lower, text),
                 _ => *on_null,
             }
         }
         Node::Pair { lhs, rhs, op, mode } => {
-            let EvalScratch { a, b, .. } = s;
+            let EvalScratch { a, b, ea, eb, .. } = s;
             let on_null = *op == CmpOp::Ne;
             let (Some(x), Some(y)) = (
-                field(ctx, rec, fields, *lhs, a),
-                field(ctx, rec, fields, *rhs, b),
+                field(ctx, rec, fields, *lhs, a, ea),
+                field(ctx, rec, fields, *rhs, b, eb),
             ) else {
                 return on_null;
             };

@@ -224,7 +224,13 @@ pub fn compile_filter(text: &str, tab: &Tab) -> Result<Predicate, QueryError> {
     };
     let ast = query::parse(text)?;
     let resolved = query::resolve(ast, &column_names(&l.columns))?;
-    query::compile(&resolved, &l.columns, l.source.dialect(), &tab.nulls)
+    query::compile_with_edits(
+        &resolved,
+        &l.columns,
+        l.source.dialect(),
+        &tab.nulls,
+        l.source.edits_arc(),
+    )
 }
 
 /// Line 2 of the bar for `text`: the hint when it is empty or valid.

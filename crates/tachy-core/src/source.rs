@@ -24,6 +24,7 @@ use thiserror::Error;
 
 use crate::{
     dialect::{self, ColumnName, Dialect, DialectOverrides, SniffReport},
+    edit::Edits,
     parse::{ParseOutcome, RecordParser, RecordRanges},
 };
 
@@ -97,6 +98,8 @@ pub struct Source {
     data_start: u64,
     /// Column count `H` (§6.4), computed on first use when headerless.
     width: OnceLock<usize>,
+    /// Column edits applied to field values (see [`crate::edit`]).
+    edits: Arc<Edits>,
 }
 
 impl Source {
@@ -153,6 +156,7 @@ impl Source {
             header_raw: None,
             data_start: 0,
             width: OnceLock::new(),
+            edits: Arc::default(),
         };
         Ok(raw.with_dialect(Dialect {
             header: false,
@@ -178,6 +182,8 @@ impl Source {
 
     /// A new `Source` over the same mapping with another dialect. The header
     /// and `data_start` are recomputed; the mapping is shared, not copied.
+    /// Column edits are dropped (the columns may have changed): re-apply
+    /// them with [`Source::with_edits`].
     pub fn with_dialect(&self, dialect: Dialect) -> Source {
         let bytes = self.map.as_deref().map_or(&[][..], |m| &m[..]);
         let mut parser = RecordParser::new(&dialect);
@@ -218,7 +224,41 @@ impl Source {
             header_raw,
             data_start,
             width,
+            edits: Arc::default(),
         }
+    }
+
+    /// A new `Source` over the same mapping, dialect and header with column
+    /// edits `edits`. Jobs holding the old `Source` keep the old edits.
+    pub fn with_edits(&self, edits: Edits) -> Source {
+        let width = OnceLock::new();
+        if let Some(&w) = self.width.get() {
+            let _ = width.set(w);
+        }
+        Source {
+            path: self.path.clone(),
+            display_name: self.display_name.clone(),
+            map: self.map.clone(),
+            len: self.len,
+            mtime: self.mtime,
+            scans: Arc::clone(&self.scans),
+            dialect: self.dialect,
+            header: self.header.clone(),
+            header_raw: self.header_raw.clone(),
+            data_start: self.data_start,
+            width,
+            edits: Arc::new(edits),
+        }
+    }
+
+    /// The column edits (empty unless set with [`Source::with_edits`]).
+    pub fn edits(&self) -> &Edits {
+        &self.edits
+    }
+
+    /// The column edits, shared.
+    pub fn edits_arc(&self) -> &Arc<Edits> {
+        &self.edits
     }
 
     /// The whole file. Empty for an empty file.

@@ -678,12 +678,13 @@ impl Theme {
 
     // ---- jobs ----------------------------------------------------------
 
-    /// A job's kind colour (§10.1): Index / Profile teal, Filter / Export amber, Sort purple.
+    /// A job's kind colour (§10.1): Index / Profile teal, Filter / Export amber,
+    /// Sort / Dupes purple.
     pub fn job(&self, kind: JobKind) -> Style {
         let fg = match kind {
             JobKind::Index | JobKind::Profile => self.teal,
             JobKind::Filter | JobKind::Export => self.amber,
-            JobKind::Sort => self.purple,
+            JobKind::Sort | JobKind::Dupes => self.purple,
         };
         self.pick(Style::new().fg(fg), Modifier::empty())
     }

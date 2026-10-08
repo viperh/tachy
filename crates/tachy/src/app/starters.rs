@@ -7,6 +7,7 @@
 use std::sync::Arc;
 
 use tachy_core::{
+    dupes::{DupeJob, DupeOptions, DupeSpec, run_dupes},
     export::{ExportColumn, ExportContext, ExportOptions, run_export},
     filter::{FilterOutput, ParentRows, run_filter},
     index::IndexPath,
@@ -253,6 +254,66 @@ impl App {
             }
             Err(e) => self.toast(ToastLevel::Error, format!("--sort: {}", e.message)),
         }
+    }
+
+    // ---- duplicates ----------------------------------------------------
+
+    /// `dupes` / `dedupe`: finds the active view's duplicate rows by the
+    /// spec's columns (after column edits) and pushes the result as a new
+    /// view when the job finishes. At most one runs per file; others queue.
+    pub(super) fn start_dupes(&mut self, spec: DupeSpec) {
+        let Some(tab) = self.state.active_tab() else {
+            return;
+        };
+        let Some(l) = &tab.loaded else {
+            return;
+        };
+        let fields: Vec<usize> = spec
+            .columns
+            .iter()
+            .filter_map(|&c| l.columns.get(c).map(|m| m.source_index))
+            .collect();
+        let rows = tab.view_len();
+        let job = DupeJob {
+            src: Arc::clone(&l.source),
+            index: Arc::clone(&l.index),
+            parent: tab.views.active_view().clone(),
+            fields,
+            mode: spec.mode,
+            ram_cap: 0,
+            tmp_dir: self.state.settings.tmp_dir.clone(),
+            options: DupeOptions::default(),
+        };
+        let title = spec.display(&l.columns);
+        let keys = tab.views.active_view().sort_keys().to_vec();
+        let needed = rows.saturating_mul(24);
+        let progress = Progress::for_kind(JobKind::Dupes, rows.saturating_mul(2));
+        let spec = JobSpec {
+            kind: JobKind::Dupes,
+            tab: tab.id,
+            view: None,
+            parent: Some(tab.views.active()),
+            title,
+            progress,
+            needed,
+            cancel: tab.cancel.child_token(),
+            start: Box::new(move |ctx| {
+                Box::pin(async move {
+                    let Progress::Rows(rp) = ctx.progress.clone() else {
+                        return Err(wrong_progress());
+                    };
+                    let ctl = ctx.control();
+                    let job = DupeJob {
+                        ram_cap: ctx.budget,
+                        tmp_dir: ctx.tmp_dir.clone(),
+                        ..job
+                    };
+                    let result = run_dupes(job, &ctx.exec, &ctl, rp).await?;
+                    Ok(JobOutput::DupesDone { result, spec, keys })
+                })
+            }),
+        };
+        self.submit_job(spec);
     }
 
     // ---- profile (M5-04) -----------------------------------------------

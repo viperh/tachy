@@ -102,7 +102,9 @@ impl ParentRows {
     pub fn from_view(view: &View) -> ParentRows {
         match view {
             View::All => ParentRows::All,
-            View::Filtered { rows, .. } => ParentRows::Filtered(Arc::clone(rows)),
+            View::Filtered { rows, .. } | View::Dupes { rows, .. } => {
+                ParentRows::Filtered(Arc::clone(rows))
+            }
             View::Ordered { list, .. } => ParentRows::Ordered(Arc::clone(list)),
         }
     }

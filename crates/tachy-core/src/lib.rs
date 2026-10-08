@@ -12,6 +12,8 @@ use thiserror::Error;
 pub mod cache;
 pub mod column;
 pub mod dialect;
+pub mod dupes;
+pub mod edit;
 pub mod exec;
 pub mod export;
 pub mod filter;

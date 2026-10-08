@@ -482,6 +482,10 @@ fn table_snapshots() {
         tab.prepare_frame(viewport);
         tab.last_col(viewport);
     });
+    snapshot_both("table_edited", &table_fixture(), |app, _, _| {
+        let tab = app.state.active_tab_mut().unwrap();
+        tab.append_edit(0, "upper | prefix #").unwrap();
+    });
 }
 
 #[test]
@@ -1340,4 +1344,5 @@ async fn a_dialect_restart_reindexes_with_a_new_generation() {
 }
 
 mod dialogs;
+mod edits;
 mod perf;

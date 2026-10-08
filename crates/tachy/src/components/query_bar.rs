@@ -29,7 +29,7 @@ use unicode_segmentation::UnicodeSegmentation;
 use super::{Component, draw_placeholder, put};
 use crate::{
     jobs::JobHandle,
-    path_complete::SHOWN_CANDIDATES,
+    path_complete::{SHOWN_CANDIDATES, separator_for},
     search_ui::{BarKind, QueryInput, SaveFlow, SaveStep, Validation, column_names},
     state::{AppState, OpenPrompt, PromptMessage},
     theme::Theme,
@@ -108,10 +108,11 @@ fn draw_open_prompt(buf: &mut Buffer, area: Rect, state: &AppState, prompt: &Ope
             put(buf, area.x + 1, y2, &err, base.patch(theme.inline_error()));
         }
         PromptMessage::Candidates(list) => {
+            let sep = separator_for(prompt.input.text());
             let mut line = list
                 .iter()
                 .take(SHOWN_CANDIDATES)
-                .map(|c| c.completed())
+                .map(|c| c.completed(sep))
                 .collect::<Vec<_>>()
                 .join("  ");
             if list.len() > SHOWN_CANDIDATES {

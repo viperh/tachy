@@ -40,6 +40,8 @@ pub enum JobKind {
     Profile,
     /// Writing a view to a file.
     Export,
+    /// Finding (`dupes`) or removing (`dedupe`) duplicate rows of a view.
+    Dupes,
 }
 
 /// Where a job is in its lifecycle (§10.2):
@@ -424,7 +426,7 @@ pub enum Progress {
     Filter(Arc<FilterProgress>),
     /// Sort (M5-03).
     Sort(Arc<SortProgress>),
-    /// Profile (M5-04).
+    /// Profile (M5-04) and duplicates.
     Rows(Arc<RowsProgress>),
     /// Export (M6-01).
     Export(Arc<ExportProgress>),
@@ -439,7 +441,7 @@ impl Progress {
             JobKind::Index => Progress::Bytes(Arc::new(BytesProgress::new(total))),
             JobKind::Filter => Progress::Filter(Arc::new(FilterProgress::new(total))),
             JobKind::Sort => Progress::Sort(Arc::new(SortProgress::new(total))),
-            JobKind::Profile => Progress::Rows(Arc::new(RowsProgress::new(total))),
+            JobKind::Profile | JobKind::Dupes => Progress::Rows(Arc::new(RowsProgress::new(total))),
             JobKind::Export => Progress::Export(Arc::new(ExportProgress::new(total))),
         }
     }
@@ -637,10 +639,15 @@ pub enum BudgetRequest {
     Profile,
     /// [`EXPORT_BUDGET`].
     Export,
+    /// Like `Sort`: `needed` is the in-memory size of the key records.
+    Dupes {
+        /// Bytes the job would use to group fully in memory.
+        needed: u64,
+    },
 }
 
 impl BudgetRequest {
-    /// The request for a job kind; `needed` is only used by Sort.
+    /// The request for a job kind; `needed` is only used by Sort and Dupes.
     pub fn for_kind(kind: JobKind, needed: u64) -> Self {
         match kind {
             JobKind::Index => BudgetRequest::Index,
@@ -648,6 +655,7 @@ impl BudgetRequest {
             JobKind::Sort => BudgetRequest::Sort { needed },
             JobKind::Profile => BudgetRequest::Profile,
             JobKind::Export => BudgetRequest::Export,
+            JobKind::Dupes => BudgetRequest::Dupes { needed },
         }
     }
 
@@ -659,6 +667,7 @@ impl BudgetRequest {
             BudgetRequest::Sort { .. } => JobKind::Sort,
             BudgetRequest::Profile => JobKind::Profile,
             BudgetRequest::Export => JobKind::Export,
+            BudgetRequest::Dupes { .. } => JobKind::Dupes,
         }
     }
 
@@ -667,7 +676,9 @@ impl BudgetRequest {
         match *self {
             BudgetRequest::Index => 0,
             BudgetRequest::Filter => FILTER_BUDGET,
-            BudgetRequest::Sort { needed } => SORT_MIN.min(needed),
+            BudgetRequest::Sort { needed } | BudgetRequest::Dupes { needed } => {
+                SORT_MIN.min(needed)
+            }
             BudgetRequest::Profile => PROFILE_BUDGET,
             BudgetRequest::Export => EXPORT_BUDGET,
         }
@@ -730,7 +741,7 @@ impl MemoryBudget {
         let free = self.free();
         let grant = match req {
             BudgetRequest::Index => free / 4,
-            BudgetRequest::Sort { needed } => {
+            BudgetRequest::Sort { needed } | BudgetRequest::Dupes { needed } => {
                 // 75 % of free, without overflow.
                 let three_quarters = (u128::from(free) * 3 / 4) as u64;
                 three_quarters.min(needed).max(req.minimum())
@@ -862,6 +873,10 @@ mod tests {
         assert!(matches!(
             Progress::for_kind(JobKind::Export, 0),
             Progress::Export(_)
+        ));
+        assert!(matches!(
+            Progress::for_kind(JobKind::Dupes, 0),
+            Progress::Rows(_)
         ));
     }
 
@@ -1052,6 +1067,24 @@ mod tests {
     }
 
     #[test]
+    fn budget_dupes_is_sized_like_a_sort() {
+        let b = MemoryBudget::new(2048 * MIB);
+        assert_eq!(
+            b.grant_for(BudgetRequest::Dupes { needed: 10 << 30 }),
+            Some(1440 * MIB)
+        );
+        assert_eq!(
+            b.grant_for(BudgetRequest::Dupes { needed: 5 * MIB }),
+            Some(5 * MIB)
+        );
+        assert_eq!(BudgetRequest::Dupes { needed: 1 << 30 }.minimum(), SORT_MIN);
+        assert_eq!(
+            BudgetRequest::for_kind(JobKind::Dupes, 7),
+            BudgetRequest::Dupes { needed: 7 }
+        );
+    }
+
+    #[test]
     fn budget_sort_takes_only_what_it_needs() {
         let b = MemoryBudget::new(2048 * MIB);
         assert_eq!(
@@ -1191,6 +1224,7 @@ mod tests {
             JobKind::Sort,
             JobKind::Profile,
             JobKind::Export,
+            JobKind::Dupes,
         ] {
             assert_eq!(BudgetRequest::for_kind(kind, 1).kind(), kind);
         }

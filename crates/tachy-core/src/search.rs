@@ -452,6 +452,8 @@ struct Engine<'a> {
     parser: RecordParser,
     rec: RecordRanges,
     scratch: Vec<u8>,
+    /// Edited value (`crate::edit`).
+    edited: Vec<u8>,
     text: String,
     since: u64,
 }
@@ -510,6 +512,7 @@ impl Engine<'_> {
             let v = self
                 .parser
                 .field_value(bytes, &self.rec, c.field, &mut self.scratch);
+            let v = self.src.edits().apply(c.field, v, &mut self.edited);
             if let Some(r) = self.matcher.find(v, &mut self.text) {
                 best = Some((c.column, r));
                 if !last {
@@ -789,7 +792,14 @@ impl Engine<'_> {
         };
         let d = self.src.dialect();
         let needle = f.needle();
+        // An edited value is not in the raw bytes.
+        let edited = self
+            .req
+            .columns
+            .iter()
+            .any(|c| self.src.edits().is_edited(c.field));
         (self.view.is_all()
+            && !edited
             && d.quote.is_none_or(|q| !needle.contains(&q))
             && !(d.escape == EscapeStyle::Backslash && needle.contains(&b'\\')))
         .then(|| needle.to_vec())
@@ -889,6 +899,7 @@ pub fn search_blocking(
         parser: RecordParser::new(src.dialect()),
         rec: RecordRanges::default(),
         scratch: Vec::new(),
+        edited: Vec::new(),
         text: String::new(),
         since: 0,
     };

@@ -3,7 +3,8 @@
 //! Three sections, each under a dim uppercase label (amber while the panel
 //! is focused), separated by a blank line:
 //!
-//! 1. **COLUMN**: `name · type · col 5/13`, then nulls, distinct, max width,
+//! 1. **COLUMN**: `name · type · col 5/13`, the column's edit chain if it has
+//!    one (`edits  drop 1 | upper`), then nulls, distinct, max width,
 //!    and min / max / mean / p50 / p95 for numeric columns (min / max for
 //!    dates). `sampling…` until the sample arrives; `(stats for i64)` when
 //!    the type changed since.
@@ -81,7 +82,8 @@ impl Component for Inspector {
         if let Some(col) = tab.cursor_source_col()
             && let Some(meta) = l.columns.get(col)
         {
-            column_section(&mut p, meta, col, l.columns.len());
+            let edits = l.source.edits().describe(meta.source_index);
+            column_section(&mut p, meta, col, l.columns.len(), edits.as_deref());
             p.y += 1;
             top_values_section(&mut p, meta, &l.source);
             p.y += 1;
@@ -140,7 +142,14 @@ impl Painter<'_> {
     }
 }
 
-fn column_section(p: &mut Painter, meta: &ColumnMeta, col: usize, n_cols: usize) {
+/// `edits` is the column's edit chain (`drop 1 | upper`), if any.
+fn column_section(
+    p: &mut Painter,
+    meta: &ColumnMeta,
+    col: usize,
+    n_cols: usize,
+    edits: Option<&str>,
+) {
     if p.has_room() {
         let x = put(p.buf, p.x, p.y, "COLUMN", p.label);
         if meta.stats_stale()
@@ -167,6 +176,10 @@ fn column_section(p: &mut Painter, meta: &ColumnMeta, col: usize, n_cols: usize)
         put(p.buf, x, p.y, &rest, p.base.patch(p.theme.dim()));
     }
     p.y += 1;
+
+    if let Some(chain) = edits {
+        p.pair("edits", chain);
+    }
 
     let Some(stats) = &meta.stats else {
         p.line("sampling…", p.base.patch(p.theme.dim()));

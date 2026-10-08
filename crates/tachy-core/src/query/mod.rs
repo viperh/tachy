@@ -21,7 +21,7 @@ use std::ops::Range;
 use thiserror::Error;
 
 pub use ast::{CmpOp, ColumnRef, Expr, Literal, Operand, ResolvedExpr, ResolvedOperand, Span};
-pub use compile::compile;
+pub use compile::{compile, compile_with_edits};
 pub use eval::{EvalScratch, HighlightRule, Predicate};
 pub use parser::parse;
 

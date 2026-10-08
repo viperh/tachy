@@ -70,6 +70,9 @@ impl App {
             Invocation::Export => self.open_export(),
             Invocation::Goto(target) => self.palette_goto(target)?,
             Invocation::DeleteView(name) => self.delete_view(name),
+            Invocation::Edit { col, change } => self.edit_column(col, change)?,
+            Invocation::ResetEdits => self.reset_edits(),
+            Invocation::Dupes(spec) => self.start_dupes(spec),
         }
         self.dirty = true;
         Ok(())

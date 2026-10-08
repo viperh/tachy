@@ -196,7 +196,7 @@ impl fmt::Display for DisplaySpec<'_> {
 }
 
 /// `range` trimmed of ASCII whitespace.
-fn trim(input: &str, range: Range<usize>) -> Range<usize> {
+pub(crate) fn trim(input: &str, range: Range<usize>) -> Range<usize> {
     let s = &input[range.clone()];
     let start = range.start + (s.len() - s.trim_start().len());
     let end = range.end - (s.len() - s.trim_end().len());
@@ -204,7 +204,11 @@ fn trim(input: &str, range: Range<usize>) -> Range<usize> {
 }
 
 /// Splits `input[range]` on `sep` outside backticks.
-fn split_outside_backticks(input: &str, sep: char, range: Range<usize>) -> Vec<Range<usize>> {
+pub(crate) fn split_outside_backticks(
+    input: &str,
+    sep: char,
+    range: Range<usize>,
+) -> Vec<Range<usize>> {
     let mut out = Vec::new();
     let mut start = range.start;
     let mut in_tick = false;
@@ -222,7 +226,7 @@ fn split_outside_backticks(input: &str, sep: char, range: Range<usize>) -> Vec<R
 }
 
 /// Resolves one column reference with the query lexer and resolver.
-fn resolve_column(
+pub(crate) fn resolve_column(
     input: &str,
     span: Range<usize>,
     names: &[crate::column::ColumnName],
@@ -285,6 +289,8 @@ pub(crate) struct TieBreaker {
     parser: RecordParser,
     cache: [(Option<u64>, RecordRanges); 2],
     scratch: [Vec<u8>; 2],
+    /// Edited values (`crate::edit`).
+    edited: [Vec<u8>; 2],
     text: [String; 2],
 }
 
@@ -295,6 +301,7 @@ impl TieBreaker {
             ctx,
             cache: Default::default(),
             scratch: Default::default(),
+            edited: Default::default(),
             text: Default::default(),
         }
     }
@@ -355,18 +362,31 @@ impl TieBreaker {
             parser,
             cache,
             scratch,
+            edited,
             text,
             ..
         } = self;
         let [sc_a, sc_b] = scratch;
+        let [ed_a, ed_b] = edited;
+        let edits = ctx.src.edits();
         let [tx_a, tx_b] = text;
         for spec in &ctx.keys[start..] {
             let ra = &cache[sa].1;
             let rb = &cache[sb].1;
-            let va = (spec.field < ra.fields.len())
-                .then(|| parser.field_value(bytes, ra, spec.field, sc_a));
-            let vb = (spec.field < rb.fields.len())
-                .then(|| parser.field_value(bytes, rb, spec.field, sc_b));
+            let va = (spec.field < ra.fields.len()).then(|| {
+                edits.apply(
+                    spec.field,
+                    parser.field_value(bytes, ra, spec.field, sc_a),
+                    ed_a,
+                )
+            });
+            let vb = (spec.field < rb.fields.len()).then(|| {
+                edits.apply(
+                    spec.field,
+                    parser.field_value(bytes, rb, spec.field, sc_b),
+                    ed_b,
+                )
+            });
             let o = key::compare_values(spec, va, vb, &ctx.nulls, ctx.enc, tx_a, tx_b);
             if o != Ordering::Equal {
                 return o;

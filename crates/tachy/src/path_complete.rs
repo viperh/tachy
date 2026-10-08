@@ -1,9 +1,12 @@
 //! Filesystem path completion for the `open ›` prompt (M1-08), reused by the
 //! export path (M6-01).
 //!
-//! - A leading `~` / `~/` expands to `$HOME`; relative paths resolve against
-//!   the process's current directory.
-//! - One match completes fully (`/` appended for directories). Several
+//! - Separators: `/` everywhere, and `\` on Windows ([`SEPARATORS`]). On
+//!   Unix `\` is an ordinary file-name character, so it is not split on.
+//! - A leading `~` / `~/` (`~\` on Windows) expands to `$HOME`; relative
+//!   paths resolve against the process's current directory.
+//! - One match completes fully (a separator appended for directories: the
+//!   last one typed, else the platform's, [`default_separator`]). Several
 //!   matches complete to their longest common prefix; a second `Tab` with no
 //!   new input cycles through them ([`Cycle`]).
 //! - Hidden entries (starting with `.`) are only offered when the typed name
@@ -20,6 +23,36 @@ use std::{
 /// Matches listed on the prompt's second line before `+N more`.
 pub const SHOWN_CANDIDATES: usize = 10;
 
+/// The path separators the user may type on this platform.
+pub const SEPARATORS: &[char] = if cfg!(windows) { &['/', '\\'] } else { &['/'] };
+
+/// Whether `c` separates path components on this platform.
+pub fn is_separator(c: char) -> bool {
+    SEPARATORS.contains(&c)
+}
+
+/// The separator appended to completed directories when the input has
+/// none yet: `\` on Windows, `/` elsewhere.
+pub fn default_separator() -> char {
+    if cfg!(windows) { '\\' } else { '/' }
+}
+
+/// The separator completions of `input` append to directories: the last
+/// separator typed, else [`default_separator`].
+pub fn separator_for(input: &str) -> char {
+    separator_in(input, SEPARATORS, default_separator())
+}
+
+/// The separator to append in `input`: the last one typed, else
+/// `default` (`seps` are the separators that count).
+fn separator_in(input: &str, seps: &[char], default: char) -> char {
+    input
+        .chars()
+        .rev()
+        .find(|c| seps.contains(c))
+        .unwrap_or(default)
+}
+
 /// One directory entry that matches the typed name.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Candidate {
@@ -28,10 +61,10 @@ pub struct Candidate {
 }
 
 impl Candidate {
-    /// The name as completed: directories get a trailing `/`.
-    pub fn completed(&self) -> String {
+    /// The name as completed: directories get a trailing `sep`.
+    pub fn completed(&self, sep: char) -> String {
         if self.is_dir {
-            format!("{}/", self.name)
+            format!("{}{sep}", self.name)
         } else {
             self.name.clone()
         }
@@ -39,26 +72,51 @@ impl Candidate {
 }
 
 /// Splits the input into the directory part as typed (up to and including
-/// the last `/`) and the partial name after it.
+/// the last separator) and the partial name after it.
 pub fn split_input(input: &str) -> (&str, &str) {
-    match input.rfind('/') {
+    split_input_with(input, SEPARATORS)
+}
+
+/// [`split_input`] with an explicit separator set (tests use the Windows one
+/// on any platform). A Windows drive (`C:`) without a separator is a
+/// directory part too.
+fn split_input_with<'a>(input: &'a str, seps: &[char]) -> (&'a str, &'a str) {
+    match input.rfind(|c| seps.contains(&c)) {
         Some(i) => input.split_at(i + 1),
+        None if seps.contains(&'\\') && is_drive(input) => input.split_at(2),
         None => ("", input),
     }
 }
 
+/// `C:…`: a drive letter and a colon.
+fn is_drive(s: &str) -> bool {
+    let b = s.as_bytes();
+    b.len() >= 2 && b[0].is_ascii_alphabetic() && b[1] == b':'
+}
+
 /// The path `input` refers to: `~` expanded, relative to `cwd`.
 pub fn resolve(input: &str, cwd: &Path, home: Option<&Path>) -> PathBuf {
-    let expanded = match (input, home) {
-        ("~", Some(home)) => home.to_path_buf(),
-        (s, Some(home)) if s.starts_with("~/") => home.join(&s[2..]),
-        (s, _) => PathBuf::from(s),
+    let expanded = match expand_tilde(input, home, SEPARATORS) {
+        Some(p) => p,
+        None => PathBuf::from(input),
     };
     if expanded.is_absolute() {
         expanded
     } else {
         cwd.join(expanded)
     }
+}
+
+/// `~` or `~<sep>rest` as a path under `home`; `None` otherwise.
+fn expand_tilde(input: &str, home: Option<&Path>, seps: &[char]) -> Option<PathBuf> {
+    let home = home?;
+    let rest = input.strip_prefix('~')?;
+    if rest.is_empty() {
+        return Some(home.to_path_buf());
+    }
+    let mut chars = rest.chars();
+    let first = chars.next()?;
+    seps.contains(&first).then(|| home.join(chars.as_str()))
 }
 
 /// The user's home directory, for `~`.
@@ -103,18 +161,29 @@ pub struct Completion {
 /// Completes `input` against `candidates` (from [`list_candidates`] for the
 /// same input). `None` when nothing matches.
 pub fn complete(input: &str, candidates: Vec<Candidate>) -> Option<Completion> {
-    let (dir, _) = split_input(input);
+    complete_with(input, candidates, SEPARATORS, default_separator())
+}
+
+/// [`complete`] with an explicit separator set and default separator.
+fn complete_with(
+    input: &str,
+    candidates: Vec<Candidate>,
+    seps: &[char],
+    default: char,
+) -> Option<Completion> {
+    let (dir, _) = split_input_with(input, seps);
+    let sep = separator_in(input, seps, default);
     // `~` alone is the home directory.
     if input == "~" {
         return Some(Completion {
-            input: "~/".to_owned(),
+            input: format!("~{sep}"),
             cycle: None,
         });
     }
     match candidates.len() {
         0 => None,
         1 => Some(Completion {
-            input: format!("{dir}{}", candidates[0].completed()),
+            input: format!("{dir}{}", candidates[0].completed(sep)),
             cycle: None,
         }),
         _ => {
@@ -123,6 +192,7 @@ pub fn complete(input: &str, candidates: Vec<Candidate>) -> Option<Completion> {
             Some(Completion {
                 cycle: Some(Cycle {
                     dir: dir.to_owned(),
+                    sep,
                     matches: candidates,
                     next: 0,
                     last: input.clone(),
@@ -137,6 +207,8 @@ pub fn complete(input: &str, candidates: Vec<Candidate>) -> Option<Completion> {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct Cycle {
     dir: String,
+    /// Appended to directories.
+    sep: char,
     pub matches: Vec<Candidate>,
     next: usize,
     /// The input this cycle last produced. Typing anything else ends the
@@ -155,7 +227,7 @@ impl Cycle {
     pub fn advance(&mut self) -> String {
         let m = &self.matches[self.next % self.matches.len()];
         self.next = (self.next + 1) % self.matches.len();
-        self.last = format!("{}{}", self.dir, m.completed());
+        self.last = format!("{}{}", self.dir, m.completed(self.sep));
         self.last.clone()
     }
 }
@@ -208,7 +280,11 @@ mod tests {
         let dir = tree();
         assert_eq!(tab("un", dir.path(), None).unwrap().input, "unique.tsv");
         // Directories get a slash; then their content completes.
-        assert_eq!(tab("da", dir.path(), None).unwrap().input, "data/");
+        let sep = default_separator();
+        assert_eq!(
+            tab("da", dir.path(), None).unwrap().input,
+            format!("data{sep}")
+        );
         assert_eq!(
             tab("data/in", dir.path(), None).unwrap().input,
             "data/inner.csv"
@@ -245,7 +321,10 @@ mod tests {
             tab("~/un", Path::new("/"), home).unwrap().input,
             "~/unique.tsv"
         );
-        assert_eq!(tab("~", Path::new("/"), home).unwrap().input, "~/");
+        assert_eq!(
+            tab("~", Path::new("/"), home).unwrap().input,
+            format!("~{}", default_separator())
+        );
         assert_eq!(
             resolve("~/a.csv", Path::new("/x"), home),
             dir.path().join("a.csv")
@@ -273,6 +352,101 @@ mod tests {
     fn missing_directory_is_an_error() {
         let dir = tree();
         assert!(list_candidates("nope/x", dir.path(), None).is_err());
+    }
+
+    const WINDOWS: &[char] = &['/', '\\'];
+
+    fn cands(list: &[(&str, bool)]) -> Vec<Candidate> {
+        list.iter()
+            .map(|(name, is_dir)| Candidate {
+                name: (*name).to_owned(),
+                is_dir: *is_dir,
+            })
+            .collect()
+    }
+
+    #[test]
+    fn windows_separators_split_and_complete() {
+        assert_eq!(split_input_with("data\\in", WINDOWS), ("data\\", "in"));
+        assert_eq!(
+            split_input_with("C:\\Users\\me/da", WINDOWS),
+            ("C:\\Users\\me/", "da")
+        );
+        // A bare drive is a directory part.
+        assert_eq!(split_input_with("C:da", WINDOWS), ("C:", "da"));
+        assert_eq!(split_input_with("da", WINDOWS), ("", "da"));
+        // Directories get the separator last typed, else the default.
+        let c = complete_with("C:\\Us", cands(&[("Users", true)]), WINDOWS, '\\').unwrap();
+        assert_eq!(c.input, "C:\\Users\\");
+        let c = complete_with("C:/Us", cands(&[("Users", true)]), WINDOWS, '\\').unwrap();
+        assert_eq!(c.input, "C:/Users/");
+        let c = complete_with("da", cands(&[("data", true)]), WINDOWS, '\\').unwrap();
+        assert_eq!(c.input, "data\\");
+        assert_eq!(
+            complete_with("~", vec![], WINDOWS, '\\').unwrap().input,
+            "~\\"
+        );
+        // Cycling keeps the separator.
+        let c = complete_with(
+            "x\\o",
+            cands(&[("one", true), ("other", true)]),
+            WINDOWS,
+            '\\',
+        )
+        .unwrap();
+        assert_eq!(c.input, "x\\o");
+        let mut cycle = c.cycle.unwrap();
+        assert_eq!(cycle.advance(), "x\\one\\");
+        assert_eq!(cycle.advance(), "x\\other\\");
+    }
+
+    #[test]
+    fn tilde_expands_with_either_windows_separator() {
+        let home = Path::new("/home/u");
+        assert_eq!(
+            expand_tilde("~\\a.csv", Some(home), WINDOWS),
+            Some(home.join("a.csv"))
+        );
+        assert_eq!(
+            expand_tilde("~/a.csv", Some(home), WINDOWS),
+            Some(home.join("a.csv"))
+        );
+        assert_eq!(
+            expand_tilde("~", Some(home), WINDOWS),
+            Some(home.to_path_buf())
+        );
+        assert_eq!(expand_tilde("~x", Some(home), WINDOWS), None);
+        assert_eq!(expand_tilde("~/a", None, WINDOWS), None);
+        // On Unix `~\` is not the home directory: `\` is a name character.
+        assert_eq!(expand_tilde("~\\a", Some(home), &['/']), None);
+    }
+
+    #[test]
+    fn platform_separators() {
+        assert!(is_separator('/'));
+        assert_eq!(is_separator('\\'), cfg!(windows));
+        assert_eq!(separator_for("a/b"), '/');
+        assert_eq!(separator_for("ab"), default_separator());
+        // On Unix a backslash stays part of the name.
+        if !cfg!(windows) {
+            assert_eq!(split_input("a\\b"), ("", "a\\b"));
+            assert_eq!(default_separator(), '/');
+        }
+    }
+
+    #[cfg(windows)]
+    #[test]
+    fn backslash_paths_complete_on_windows() {
+        let dir = tree();
+        assert_eq!(
+            tab("data\\in", dir.path(), None).unwrap().input,
+            "data\\inner.csv"
+        );
+        assert_eq!(tab("da", dir.path(), None).unwrap().input, "data\\");
+        assert_eq!(
+            resolve("data\\inner.csv", dir.path(), None),
+            dir.path().join("data").join("inner.csv")
+        );
     }
 
     #[test]

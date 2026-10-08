@@ -62,6 +62,7 @@ pub fn kind_label(kind: JobKind) -> &'static str {
         JobKind::Sort => "sort",
         JobKind::Profile => "profile",
         JobKind::Export => "export",
+        JobKind::Dupes => "dupes",
     }
 }
 
