@@ -806,6 +806,26 @@ fn letters_are_text_in_text_contexts() {
 }
 
 #[test]
+fn altgr_tilde_types_into_the_filter_bar() {
+    let mut app = new_app();
+    let _f = with_tab(&mut app, "name,city\nann,Rome\nbob,Oslo\n");
+    let mut tui = tui(120, 40);
+    ch(&mut app, &mut tui, 'f');
+    type_text(&mut app, &mut tui, "name ");
+    // AltGr+`~` as Windows terminals report it.
+    press(
+        &mut app,
+        &mut tui,
+        KeyCode::Char('~'),
+        KeyModifiers::CONTROL | KeyModifiers::ALT,
+    );
+    type_text(&mut app, &mut tui, " \"^b\"");
+    let bar = app.state.find.bar.as_ref().unwrap();
+    assert_eq!(bar.edit.text(), "name ~ \"^b\"");
+    assert!(crate::search_ui::compile_filter(bar.edit.text(), tab(&app)).is_ok());
+}
+
+#[test]
 fn unbound_keys_are_ignored() {
     let (mut app, _f, mut tui) = nav_app();
     for code in [

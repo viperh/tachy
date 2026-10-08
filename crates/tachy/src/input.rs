@@ -17,6 +17,8 @@ use crossterm::event::{KeyCode, KeyEvent, KeyModifiers};
 use tachy_core::text;
 use unicode_segmentation::UnicodeSegmentation;
 
+use crate::keymap::is_altgr_char;
+
 /// The text, the cursor (a byte offset on a grapheme boundary) and the
 /// horizontal scroll offset (a byte offset of the first shown grapheme).
 #[derive(Debug, Clone, Default)]
@@ -141,7 +143,7 @@ impl LineEdit {
         let ctrl = key.modifiers.contains(KeyModifiers::CONTROL);
         let alt = key.modifiers.contains(KeyModifiers::ALT);
         match key.code {
-            KeyCode::Char(c) if !ctrl && !alt => {
+            KeyCode::Char(c) if (!ctrl && !alt) || is_altgr_char(c, key.modifiers) => {
                 let mut buf = [0; 4];
                 self.insert(c.encode_utf8(&mut buf));
             }
@@ -295,6 +297,27 @@ mod tests {
         i.handle_key(ctrl('a'));
         i.handle_key(ctrl('e'));
         assert_eq!(i.cursor(), 7);
+    }
+
+    #[test]
+    fn altgr_characters_are_typed() {
+        // AltGr arrives as Ctrl+Alt on Windows and some layouts.
+        let altgr = KeyModifiers::CONTROL | KeyModifiers::ALT;
+        let mut i = LineInput::default();
+        for c in ['~', '[', ']', '{', '}', '\\', '|', '@', 'ą', '€'] {
+            assert!(i.handle_key(KeyEvent::new(KeyCode::Char(c), altgr)), "{c}");
+        }
+        assert_eq!(i.text(), "~[]{}\\|@ą€");
+        // Ctrl+Alt+letter is still not text.
+        i.set("");
+        i.handle_key(KeyEvent::new(KeyCode::Char('a'), altgr));
+        i.handle_key(KeyEvent::new(KeyCode::Char('7'), altgr));
+        assert_eq!(i.text(), "");
+        // Ctrl alone keeps its editing meaning, Alt alone types nothing.
+        i.set("ab");
+        i.handle_key(ctrl('a'));
+        i.handle_key(KeyEvent::new(KeyCode::Char('~'), KeyModifiers::ALT));
+        assert_eq!((i.text(), i.cursor()), ("ab", 0));
     }
 
     #[test]

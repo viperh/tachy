@@ -36,8 +36,18 @@ impl From<KeyEvent> for KeyChord {
     }
 }
 
+/// Whether `c` typed with `mods` is an AltGr character: `CONTROL | ALT` on
+/// anything but an ASCII letter or digit. Windows terminals (and some Linux
+/// layouts) report AltGr as Ctrl+Alt, and many layouts type `~ [ ] { } \ |
+/// @` with it, so these are characters, not shortcuts. `ctrl-alt-a` stays a
+/// shortcut.
+pub fn is_altgr_char(c: char, mods: KeyModifiers) -> bool {
+    mods.contains(KeyModifiers::CONTROL | KeyModifiers::ALT) && !c.is_ascii_alphanumeric()
+}
+
 /// The normalisation rules of M1-06:
 /// - only `CONTROL | ALT | SHIFT` are kept;
+/// - an AltGr character ([`is_altgr_char`]) drops `CONTROL | ALT`;
 /// - `Char` drops `SHIFT` (the character encodes it);
 /// - `Char` with `CONTROL` is lowercased (`ctrl-D` ≡ `ctrl-d`);
 /// - `BackTab` always has `SHIFT`.
@@ -46,6 +56,9 @@ fn normalise(code: KeyCode, mods: KeyModifiers) -> KeyChord {
     let code = match code {
         KeyCode::Char(c) => {
             mods.remove(KeyModifiers::SHIFT);
+            if is_altgr_char(c, mods) {
+                mods.remove(KeyModifiers::CONTROL | KeyModifiers::ALT);
+            }
             if mods.contains(KeyModifiers::CONTROL) {
                 KeyCode::Char(c.to_ascii_lowercase())
             } else {
@@ -324,6 +337,24 @@ mod tests {
         assert!(parse_key_chord("f13").is_err());
         assert!(parse_key_chord("<g><g>").unwrap_err().contains("multi-key"));
         assert!(parse_key_chord("<ctrl-x><ctrl-c>").is_err());
+    }
+
+    #[test]
+    fn altgr_characters_normalise_to_the_plain_character() {
+        let altgr = KeyModifiers::CONTROL | KeyModifiers::ALT;
+        assert_eq!(KeyChord::new(KeyCode::Char('~'), altgr), ch('~'));
+        assert_eq!(
+            KeyChord::new(KeyCode::Char('{'), altgr | KeyModifiers::SHIFT),
+            ch('{')
+        );
+        // Letters and digits keep the shortcut.
+        assert_eq!(
+            KeyChord::new(KeyCode::Char('a'), altgr),
+            chord(KeyCode::Char('a'), altgr)
+        );
+        assert!(!is_altgr_char('7', altgr));
+        assert!(!is_altgr_char('~', KeyModifiers::ALT));
+        assert!(!is_altgr_char('~', KeyModifiers::CONTROL));
     }
 
     #[test]
