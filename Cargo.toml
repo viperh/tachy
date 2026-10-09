@@ -7,7 +7,7 @@ members = ["crates/*"]
 [workspace.package]
 version = "0.1.0"
 edition = "2024"
-authors = ["qvipehr <olteanromeodavid34@gmail.com>"]
+authors = ["qviperh <olteanromeodavid34@gmail.com>"]
 license = "MIT"
 repository = "https://github.com/viperh/tachy"
 rust-version = "1.90"
